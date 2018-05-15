@@ -84,7 +84,7 @@ public class JSONStringMapperTest {
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
-    public static class TestDTO {
+    static class TestDTO {
         private int aInt;
         private String aString;
         private double aDouble;
@@ -96,6 +96,7 @@ public class JSONStringMapperTest {
     @Test
     public void mapReturnsMappedDTOGivenAJsonStringAndDtoClass() throws Exception {
         TestDTO result = mapper.apply(SAMPLE_VALID_JSON);
+
         assertThat(result, is(SAMPLE_TEST_DTO));
     }
 

@@ -4,9 +4,9 @@
 
 package com.amazon.pocketEtl.integration.db;
 
-import javafx.util.Pair;
-
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * An Helper class which exposes static methods for substituting values in SQL string which
@@ -47,17 +47,16 @@ public class SqlStringHelpers {
      * @param keyValueSubstitutions Key-Value pairs.
      * @return An SQL string with substitutions filled in.
      */
-    public static String substituteSQL(String originalSql, List<Pair<String, String>> keyValueSubstitutions) {
+    public static String substituteSQL(String originalSql, Map<String, String> keyValueSubstitutions) {
         if (keyValueSubstitutions == null) { return originalSql; }
 
-        String result = originalSql;
+        AtomicReference<String> result = new AtomicReference<>(originalSql);
 
-        for (Pair<String, String> substitution : keyValueSubstitutions) {
-            if (substitution == null) { continue; }
-            String substitutionKey = String.format("${%s}", substitution.getKey());
-            result = result.replace(substitutionKey, substitution.getValue());
-        }
+        keyValueSubstitutions.forEach((key, value) -> {
+            String substitutionKey = String.format("${%s}", key);
+            result.set(result.get().replace(substitutionKey, value));
+        });
 
-        return result;
+        return result.get();
     }
 }
