@@ -113,31 +113,34 @@ optional and do not have to be implemented.
 
 #### Extractors
 Extractors produce objects at the head of a stream. Typically they read from some kind of persistent storage. They continue producing objects until the source of the data has been exhausted.
-| Name     | Description |
-|:---------|:------------|
-| InputStreamExtractor | Maps an input stream into objects and extracts them. An input stream mapper that can read CSV files is provided.
-| IterableExtractor    | Extracts objects from any Java object that implements Iterable.
-| IteratorExtractor    | Extracts objects from any Java object that implements Iterator.
-| S3BufferedExtractor  | Reads a complete file from AWS S3 into memory and then extracts objects from it as an input stream. An input stream mapper that can read CSV files is provided.
-| SqlExtractor         | Executes and extracts objects based on an SQL query against a provided JDBC DataSource.
-| SqsExtractor         | Polls and extracts objects from an AWS SQS Queue. A deserializer that can read JSON strings is provided.
+
+Name | Description
+:---|:---
+InputStreamExtractor | Maps an input stream into objects and extracts them. An input stream mapper that can read CSV files is provided.
+IterableExtractor | Extracts objects from any Java object that implements Iterable.
+IteratorExtractor | Extracts objects from any Java object that implements Iterator.
+S3BufferedExtractor | Reads a complete file from AWS S3 into memory and then extracts objects from it as an input stream. An input stream mapper that can read CSV files is provided.
+SqlExtractor | Executes and extracts objects based on an SQL query against a provided JDBC DataSource.
+SqsExtractor | Polls and extracts objects from an AWS SQS Queue. A deserializer that can read JSON strings is provided.
 
 #### Transformers
 Transformers take a single data object from the stream and either transform it into a different object, remove the object from the stream, or fan-out into multiple objects.
-| Name      | Description |
-|:----------|:------------|
-| FilterTransformer | Filters objects based on a custom Lookup dataset and a predicate. An implementation of a cached Lookup is provided that can be used as a Loader in a parallel stream to populate the cache.
-| MapTransformer    | The simple reference Transformer that takes a single object and maps it into another single object.
+
+Name | Description
+:---|:---
+FilterTransformer | Filters objects based on a custom Lookup dataset and a predicate. An implementation of a cached Lookup is provided that can be used as a Loader in a parallel stream to populate the cache.
+MapTransformer | The simple reference Transformer that takes a single object and maps it into another single object.
 
 #### Loaders
 Loaders sit at the tail of a stream, take objects from the stream and load them to a final destination. Typically the final destination will be some kind of persistent data store or stream.
-| Name      | Description |
-|:----------|:------------|
-| DynamoDbLoader     | Loads records into an AWS DynamoDB table using a provided function to generate the hash key from each record.
-| MetricsLoader      | Extracts all the numeric values of an object and passes them to a provided metrics logging object.
-| ParallelLoader     | Meta-loader that generates an instance of a different loader for every new thread it sees, allowing non-threadsafe loaders to be used in parallel loader configurations without having to block on each other (eg: loaders that write serial streams).
-| RedshiftBulkLoader | Loads all records into an AWS Redshift database efficiently as a single batch (using COPY) by first staging the data in AWS S3.
-| S3FastLoader       | Streams objects into files stored in AWS S3. Creates multiple files of a specified maximum part file size.
+
+Name | Description
+:---|:---
+DynamoDbLoader | Loads records into an AWS DynamoDB table using a provided function to generate the hash key from each record.
+MetricsLoader | Extracts all the numeric values of an object and passes them to a provided metrics logging object.
+ParallelLoader | Meta-loader that generates an instance of a different loader for every new thread it sees, allowing non-threadsafe loaders to be used in parallel loader configurations without having to block on each other (eg: loaders that write serial streams).
+RedshiftBulkLoader | Loads all records into an AWS Redshift database efficiently as a single batch (using COPY) by first staging the data in AWS S3.
+S3FastLoader | Streams objects into files stored in AWS S3. Creates multiple files of a specified maximum part file size.
 
 Reasons to use PocketETL
 ------------------------
