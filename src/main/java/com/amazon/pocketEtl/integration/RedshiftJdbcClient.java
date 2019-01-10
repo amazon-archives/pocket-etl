@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package com.amazon.pocketEtl.integration;
 
 import com.amazon.pocketEtl.EtlMetrics;
 import com.amazon.pocketEtl.EtlProfilingScope;
+import com.amazon.pocketEtl.exception.DependencyException;
 import org.apache.logging.log4j.Logger;
 import org.joda.time.DateTime;
 
@@ -69,6 +70,12 @@ public class RedshiftJdbcClient {
             "insert into " + DESTINATION_TABLE_NAME_TOKEN + " " +
                     "select * from " + STAGE_TABLE_NAME_TOKEN;
 
+    private static final String DELETE_ALL_ROWS_FROM_DESTINATION_TABLE =
+            "delete from " + DESTINATION_TABLE_NAME_TOKEN;
+
+    private static final String TRUNCATE_TABLE =
+            "truncate " + DESTINATION_TABLE_NAME_TOKEN;
+
     private final DataSource dataSource;
 
     /**
@@ -104,13 +111,13 @@ public class RedshiftJdbcClient {
                 connection = dataSource.getConnection();
 
                 if (connection == null) {
-                    throw new RuntimeException("DataSource returned null connection");
+                    throw new DependencyException("DataSource returned null connection");
                 }
 
                 dropTableIfExists(connection, stageTableName);
                 createTemporaryTableLikeExistingTable(connection, stageTableName, destinationTableName);
 
-                copyFromS3ToTemporaryTable(connection, fileColumnNames, stageTableName, s3Url, iamRoleToAssume, sourceS3region);
+                copyFromS3ToRedshiftTable(connection, fileColumnNames, stageTableName, s3Url, iamRoleToAssume, sourceS3region);
 
                 connection.setAutoCommit(false);
 
@@ -143,6 +150,80 @@ public class RedshiftJdbcClient {
                 } catch (SQLException ignored2) {
                 }
             }
+        }
+    }
+
+    /**
+     * Deletes all the rows of destination table and then loads data from S3 into destination table.
+     *
+     * @param fileColumnNames      List of column names to map the data onto (in the order they are found in the file)
+     * @param destinationTableName The table name of the final destination table
+     * @param sourceS3bucket       S3 Bucket where the data to loader can be found
+     * @param sourceS3prefix       Key prefix to locate al the files in S3 to loader
+     * @param sourceS3region       S3 region where the bucket is hosted
+     * @param iamRoleToAssume      IAM role assumed by Redshift to read the data from S3
+     * @param parentMetrics        Parent metrics object to log timers and counters into
+     */
+    public void deleteAndCopy(List<String> fileColumnNames, String destinationTableName, String sourceS3bucket, String sourceS3prefix,
+                              String sourceS3region, String iamRoleToAssume, EtlMetrics parentMetrics) {
+        try (EtlProfilingScope ignored = new EtlProfilingScope(parentMetrics, "RedshiftJdbcClient.deleteAndCopy")) {
+            String s3Url = String.format("s3://%s/%s/", sourceS3bucket, sourceS3prefix);
+            Connection connection = null;
+
+            try {
+                connection = dataSource.getConnection();
+
+                if (connection == null) {
+                    throw new DependencyException("DataSource returned null connection");
+                }
+
+                connection.setAutoCommit(false);
+
+                deleteAllRowsFromDestinationTable(connection, destinationTableName);
+                copyFromS3ToRedshiftTable(connection, fileColumnNames, destinationTableName, s3Url, iamRoleToAssume, sourceS3region);
+
+                connection.commit();
+
+                connection.setAutoCommit(true);
+            } catch (SQLException e) {
+                if (connection != null) {
+                    // Attempt a rollback if something went wrong
+                    logger.warn("SQL exception thrown during Redshift deleteAndCopy operation, rolling back transaction", e);
+
+                    try {
+                        connection.rollback();
+                    } catch (SQLException nestedException) {
+                        logger.warn("SQL exception thrown during rollback", nestedException);
+                    }
+                }
+            } finally {
+                try {
+                    if (connection != null && !connection.isClosed()) {
+                        connection.close();
+                    }
+                } catch (SQLException ignored2) {
+                }
+            }
+        }
+    }
+
+    /**
+     * Deletes all the rows of given table.
+     *
+     * @param tableName name of the table to truncate.
+     */
+    public void truncate(String tableName) {
+        try (Connection connection = dataSource.getConnection()) {
+            if (connection == null) {
+                throw new DependencyException("DataSource returned null connection");
+            }
+
+            try (PreparedStatement preparedStatement = connection.prepareStatement(
+                    TRUNCATE_TABLE.replace(DESTINATION_TABLE_NAME_TOKEN, tableName))) {
+                preparedStatement.execute();
+            }
+        } catch (SQLException e) {
+            logger.warn("SQL exception thrown during Redshift truncate operation.", e);
         }
     }
 
@@ -186,12 +267,12 @@ public class RedshiftJdbcClient {
                 .replace(AWS_S3_REGION_TOKEN, awsS3Region);
     }
 
-    private void copyFromS3ToTemporaryTable(Connection connection, List<String> fileColumnNames, String temporaryTableName,
-                                            String s3SourceUrl, String iamRole, String awsS3Region) throws SQLException {
+    private void copyFromS3ToRedshiftTable(Connection connection, List<String> fileColumnNames, String destinationTableName,
+                                           String s3SourceUrl, String iamRole, String awsS3Region) throws SQLException {
 
-        String combinedColumnNames = fileColumnNames.stream().collect(Collectors.joining(","));
+        String combinedColumnNames = String.join(",", fileColumnNames);
         try (PreparedStatement preparedStatement = connection.prepareStatement(
-                performSqlCopySubstitutions(COPY_SQL, temporaryTableName, combinedColumnNames, s3SourceUrl,
+                performSqlCopySubstitutions(COPY_SQL, destinationTableName, combinedColumnNames, s3SourceUrl,
                         iamRole, awsS3Region))) {
             preparedStatement.execute();
         }
@@ -213,6 +294,13 @@ public class RedshiftJdbcClient {
         try (PreparedStatement preparedStatement = connection.prepareStatement(
                 performSqlDeleteFromTableSubstitutions(DELETE_FROM_TABLE_USING_TEMPORARY_TABLE, columnMatchSQL,
                         temporaryTableName, destinationTableName))) {
+            preparedStatement.execute();
+        }
+    }
+
+    private void deleteAllRowsFromDestinationTable(Connection connection, String destinationTableName) throws SQLException {
+        try (PreparedStatement preparedStatement = connection.prepareStatement(
+                DELETE_ALL_ROWS_FROM_DESTINATION_TABLE.replace(DESTINATION_TABLE_NAME_TOKEN, destinationTableName))) {
             preparedStatement.execute();
         }
     }

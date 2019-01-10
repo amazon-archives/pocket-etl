@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -16,15 +16,13 @@
 package com.amazon.pocketEtl.extractor;
 
 import com.google.common.collect.ImmutableList;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import org.joda.time.DateTime;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
 
-import java.util.List;
+import java.time.Instant;
+import java.util.Optional;
 import java.util.function.Function;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -40,7 +38,9 @@ public class JSONStringMapperTest {
             "\"aDouble\": 4.125," +
             "\"aBoolean\": true," +
             "\"aDateTime\": \"2017-08-14T12:00:00Z\"," +
-            "\"aList\": [\"listItemOne\", \"listItemTwo\", \"listItemThree\"]" +
+            "\"java8DateTime\": \"1970-01-01T00:00:00Z\"," +
+            "\"aList\": [\"listItemOne\", \"listItemTwo\", \"listItemThree\"]," +
+            "\"optionalString\" : \"sampleOptionalString\"" +
             "}";
 
     private static final String SAMPLE_INVALID_JSON = "{\"name\"}";
@@ -72,6 +72,7 @@ public class JSONStringMapperTest {
             "\"aDouble\": 4.125," +
             "\"aBoolean\": true," +
             "\"aDateTime\": \"2017-08-14T12:00:00Z\"," +
+            "\"java8DateTime\": \"1970-01-01T00:00:00Z\"," +
             "\"aList\": [\"listItemOne\", \"listItemTwo\", \"listItemThree\"]" +
             "}, {" +
             "\"aInt\": 20," +
@@ -79,8 +80,14 @@ public class JSONStringMapperTest {
             "\"aDouble\": 4.125," +
             "\"aBoolean\": true," +
             "\"aDateTime\": \"2017-07-14T12:00:00Z\"," +
+            "\"java8DateTime\": \"1970-01-01T00:00:00Z\"," +
             "\"aList\": [\"listItemOne\", \"listItemTwo\", \"listItemThree\"]" +
             "}]";
+
+    private static final String SAMPLE_VALID_JSON_WITH_NULL_OPTIONAL_FIELD_VALUE =
+            "{" +
+            "\"optionalString\" : null" +
+            "}";
 
     private static final TestDTO SAMPLE_TEST_DTO = new TestDTO(
             10,
@@ -88,31 +95,21 @@ public class JSONStringMapperTest {
             4.125,
             true,
             DateTime.parse("2017-08-14T12:00:00Z"),
-            ImmutableList.of("listItemOne", "listItemTwo", "listItemThree"));
+            Instant.ofEpochMilli(0),
+            ImmutableList.of("listItemOne", "listItemTwo", "listItemThree"),
+            Optional.of("sampleOptionalString"));
 
     private Function<String, TestDTO> mapper = JSONStringMapper.of(TestDTO.class);
 
-    @Data
-    @AllArgsConstructor
-    @NoArgsConstructor
-    static class TestDTO {
-        private int aInt;
-        private String aString;
-        private double aDouble;
-        private boolean aBoolean;
-        private DateTime aDateTime;
-        private List<String> aList;
-    }
-
     @Test
-    public void mapReturnsMappedDTOGivenAJsonStringAndDtoClass() throws Exception {
+    public void mapReturnsMappedDTOGivenAJsonStringAndDtoClass() {
         TestDTO result = mapper.apply(SAMPLE_VALID_JSON);
 
         assertThat(result, is(SAMPLE_TEST_DTO));
     }
 
     @Test
-    public void mapReturnsNullWhenJsonStringIsNull() throws Exception {
+    public void mapReturnsNullWhenJsonStringIsNull() {
         TestDTO result = mapper.apply(null);
 
         assertThat(result, nullValue());
@@ -150,5 +147,19 @@ public class JSONStringMapperTest {
     @Test(expected = RuntimeException.class)
     public void mapThrowsRunTimeExceptionIfJsonStringContainsMoreThanOneObject() {
         mapper.apply(SAMPLE_JSON_HAVING_MORE_THAN_ONE_OBJECT);
+    }
+
+    @Test
+    public void mapReturnsMappedDtoWithOptionalFieldBeingEmptyWhenJsonStringHasOptionalFieldWithNullValue() {
+        TestDTO result = mapper.apply(SAMPLE_VALID_JSON_WITH_NULL_OPTIONAL_FIELD_VALUE);
+
+        assertThat(result.getOptionalString(), is(Optional.empty()));
+    }
+
+    @Test
+    public void mapReturnsMappedDtoWithOptionalFieldBeingNullWhenJsonStringHasMissingOptionalField() {
+        TestDTO result = mapper.apply(SAMPLE_JSON_WITH_LESS_FIELDS_THAN_IN_DTO);
+
+        assertThat(result.getOptionalString(), is(nullValue()));
     }
 }

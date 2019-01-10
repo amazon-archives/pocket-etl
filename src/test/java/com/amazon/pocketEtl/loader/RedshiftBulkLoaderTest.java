@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package com.amazon.pocketEtl.loader;
 
 import com.amazon.pocketEtl.EtlTestBase;
 import com.amazon.pocketEtl.Loader;
+import com.amazon.pocketEtl.integration.RedshiftJdbcClient;
 import com.amazonaws.services.s3.AmazonS3;
 import com.google.common.collect.ImmutableList;
 import org.junit.Before;
@@ -26,12 +27,12 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.util.List;
+import java.util.function.Supplier;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -52,19 +53,10 @@ public class RedshiftBulkLoaderTest extends EtlTestBase {
     private DataSource mockDataSource;
 
     @Mock
-    private Connection mockConnection;
-
-    @Mock
-    private PreparedStatement mockPreparedStatement;
-
-    @Mock
     private AmazonS3 mockAmazonS3;
 
-    @Before
-    public void initializeMockDataSource() throws SQLException {
-        when(mockDataSource.getConnection()).thenReturn(mockConnection);
-        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
-    }
+    @Mock
+    private RedshiftJdbcClient mockRedshiftJdbcClient;
 
     @Test
     public void canCreateALoaderWithMinimumProperties() {
@@ -117,26 +109,94 @@ public class RedshiftBulkLoaderTest extends EtlTestBase {
     }
 
     @Test
-    public void newRedshiftViaS3LoaderCreatesLoaderWhichCallsCopyAndMergeOnCloseIfDataWasLoaded() throws Exception {
+    public void newRedshiftViaS3LoaderCreatesLoaderWhichCallsCopyAndMergeOnCloseIfDataWasLoadedWithDefaultLoadStrategy() throws Exception {
         Loader<TestDTO> redshiftLoader = getMinimalLoaderSupplier()
                 .withAmazonS3(mockAmazonS3)
+                .withS3Prefix(S3_PREFIX)
+                .withRedshiftJdbcClient(mockRedshiftJdbcClient)
+                .get();
+
+
+        redshiftLoader.open(etlProfilingScope.getMetrics());
+        redshiftLoader.load(OBJECT_TO_WRITE);
+        redshiftLoader.close();
+
+        verify(mockRedshiftJdbcClient).copyAndMerge(eq(EXTRACT_COLUMN_NAMES), eq(KEY_COLUMN_NAMES), eq(DESTINATION_TABLE_NAME),
+                eq(S3_BUCKET), anyString(), eq(S3_REGION), eq(IAM_ROLE), eq(mockMetrics));
+    }
+
+    @Test
+    public void newRedshiftViaS3LoaderCreatesLoaderWhichCallsCopyAndMergeOnCloseIfDataWasLoadedWithMergeIntoExistingDataStrategy() throws Exception {
+        Loader<TestDTO> redshiftLoader = getMinimalLoaderSupplier()
+                .withAmazonS3(mockAmazonS3)
+                .withS3Prefix(S3_PREFIX)
+                .withLoadStrategy(RedshiftLoadStrategy.MERGE_INTO_EXISTING_DATA)
+                .withRedshiftJdbcClient(mockRedshiftJdbcClient)
+                .get();
+
+
+        redshiftLoader.open(etlProfilingScope.getMetrics());
+        redshiftLoader.load(OBJECT_TO_WRITE);
+        redshiftLoader.close();
+
+        verify(mockRedshiftJdbcClient).copyAndMerge(eq(EXTRACT_COLUMN_NAMES), eq(KEY_COLUMN_NAMES), eq(DESTINATION_TABLE_NAME),
+                eq(S3_BUCKET), anyString(), eq(S3_REGION), eq(IAM_ROLE), eq(mockMetrics));
+    }
+
+    @Test
+    public void newRedshiftViaS3LoaderCreatesLoaderWhichCallsDeleteAndCopyOnCloseIfDataWasLoadedWithClobberExistingDataStrategy() throws Exception {
+        Loader<TestDTO> redshiftLoader = getMinimalLoaderSupplier()
+                .withAmazonS3(mockAmazonS3)
+                .withRedshiftJdbcClient(mockRedshiftJdbcClient)
+                .withLoadStrategy(RedshiftLoadStrategy.CLOBBER_EXISTING_DATA)
                 .get();
 
         redshiftLoader.open(etlProfilingScope.getMetrics());
         redshiftLoader.load(OBJECT_TO_WRITE);
         redshiftLoader.close();
 
-        verify(mockDataSource).getConnection();
+        verify(mockRedshiftJdbcClient).deleteAndCopy(eq(EXTRACT_COLUMN_NAMES), eq(DESTINATION_TABLE_NAME),
+                eq(S3_BUCKET), anyString(), eq(S3_REGION), eq(IAM_ROLE), eq(mockMetrics));
     }
 
     @Test
-    public void newRedshiftViaS3LoaderProducesLoaderWhichDoesNotCallCopyAndMergeOnCloseIfDataWasNotLoaded() throws Exception {
-        Loader<TestDTO> redshiftLoader = getMinimalLoaderSupplier().get();
+    public void newRedshiftViaS3LoaderCreatesLoaderWhichCallsTruncateOnCloseIfDataWasNotLoadedWithClobberExistingDataStrategy() throws Exception {
+        Loader<TestDTO> redshiftLoader = getMinimalLoaderSupplier()
+                .withAmazonS3(mockAmazonS3)
+                .withLoadStrategy(RedshiftLoadStrategy.CLOBBER_EXISTING_DATA)
+                .withRedshiftJdbcClient(mockRedshiftJdbcClient)
+                .get();
+
 
         redshiftLoader.open(etlProfilingScope.getMetrics());
         redshiftLoader.close();
 
-        verifyNoMoreInteractions(mockDataSource);
+        verify(mockRedshiftJdbcClient).truncate(DESTINATION_TABLE_NAME);
+    }
+
+    @Test
+    public void newRedshiftViaS3LoaderProducesLoaderWhichDoesNotCallTruncateOnCloseIfDataWasNotLoadedWithDefaultStrategy() throws Exception {
+        Loader<TestDTO> redshiftLoader = getMinimalLoaderSupplier().
+                withRedshiftJdbcClient(mockRedshiftJdbcClient)
+                .get();
+
+        redshiftLoader.open(etlProfilingScope.getMetrics());
+        redshiftLoader.close();
+
+        verifyNoMoreInteractions(mockRedshiftJdbcClient);
+    }
+
+    @Test
+    public void newRedshiftViaS3LoaderProducesLoaderWhichDoesNotCallTruncateOnCloseIfDataWasNotLoadedWithMergeIntoExistingDataStrategy() throws Exception {
+        Loader<TestDTO> redshiftLoader = getMinimalLoaderSupplier()
+                .withLoadStrategy(RedshiftLoadStrategy.MERGE_INTO_EXISTING_DATA)
+                .withRedshiftJdbcClient(mockRedshiftJdbcClient)
+                .get();
+
+        redshiftLoader.open(etlProfilingScope.getMetrics());
+        redshiftLoader.close();
+
+        verifyNoMoreInteractions(mockRedshiftJdbcClient);
     }
 
     private RedshiftBulkLoader.RedshiftBulkLoaderSupplier<TestDTO> getMinimalLoaderSupplier() {

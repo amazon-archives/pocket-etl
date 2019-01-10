@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 package com.amazon.pocketEtl.integration;
 
 import com.amazon.pocketEtl.EtlTestBase;
+import com.amazon.pocketEtl.exception.DependencyException;
 import com.google.common.collect.ImmutableList;
 import org.joda.time.DateTimeUtils;
 import org.junit.After;
@@ -75,6 +76,19 @@ public class RedshiftJdbcClientTest extends EtlTestBase {
 
     private static final String COPY_AND_MERGE_SQL_6 =
             "drop table stage_1234";
+
+    private static final String DELETE_AND_COPY_SQL_1 =
+            "delete from dest_table";
+
+    private static final String DELETE_AND_COPY_SQL_2 =
+            "copy dest_table(filecol1,filecol2,filecol3) " +
+                    "from 's3://s3bucket/a/prefix/' " +
+                    "iam_role 'iamRole' " +
+                    "region 's3Region' " +
+                    "removequotes";
+
+    private static final String TRUNCATE_SQL =
+            "truncate dest_table";
 
     @Mock
     private DataSource mockRedshiftDataSource;
@@ -144,7 +158,7 @@ public class RedshiftJdbcClientTest extends EtlTestBase {
     }
 
     @Test
-    public void copyAndMergeStillCosesAfterRollBackException() throws Exception {
+    public void copyAndMergeStillClosesAfterRollBackException() throws Exception {
         when(mockPreparedStatement.execute()).thenThrow(new SQLException("Redshift hates you")).thenReturn(true);
         doThrow(new SQLException("Test Exception")).when(mockRedshiftConnection).rollback();
 
@@ -170,11 +184,82 @@ public class RedshiftJdbcClientTest extends EtlTestBase {
         inOrder.verify(mockRedshiftConnection).close();
     }
 
-    @Test(expected = RuntimeException.class)
-    public void copyAndMergeThrowsRuntimeExceptionOnNullConnection() throws Exception {
+    @Test(expected = DependencyException.class)
+    public void copyAndMergeThrowsResourceNotFoundOnNullConnection() throws Exception {
         when(mockRedshiftDataSource.getConnection()).thenReturn(null);
 
         redshiftJdbcClient.copyAndMerge(FILE_COLUMN_NAMES, KEY_COLUMN_NAMES, DESTINATION_TABLE, S3_BUCKET, S3_PREFIX,
                 S3_REGION, IAM_ROLE, mockMetrics);
+    }
+
+    @Test
+    public void deleteAndCopyGeneratesAndExecutesSqlCorrectly() throws Exception {
+        redshiftJdbcClient.deleteAndCopy(FILE_COLUMN_NAMES, DESTINATION_TABLE, S3_BUCKET, S3_PREFIX,
+                S3_REGION, IAM_ROLE, mockMetrics);
+
+        InOrder inOrder = inOrder(mockPreparedStatement, mockRedshiftConnection);
+        inOrder.verify(mockRedshiftConnection).setAutoCommit(eq(false));
+        inOrder.verify(mockRedshiftConnection).prepareStatement(eq(DELETE_AND_COPY_SQL_1));
+        inOrder.verify(mockPreparedStatement).execute();
+        inOrder.verify(mockRedshiftConnection).prepareStatement(eq(DELETE_AND_COPY_SQL_2));
+        inOrder.verify(mockPreparedStatement).execute();
+        inOrder.verify(mockRedshiftConnection).commit();
+        inOrder.verify(mockRedshiftConnection).setAutoCommit(eq(true));
+        inOrder.verify(mockRedshiftConnection).close();
+    }
+
+    @Test
+    public void deleteAndCopyRollsbackOnSQLException() throws Exception {
+        when(mockPreparedStatement.execute()).thenThrow(new SQLException("Redshift hates you"));
+
+        redshiftJdbcClient.deleteAndCopy(FILE_COLUMN_NAMES, DESTINATION_TABLE, S3_BUCKET, S3_PREFIX,
+                S3_REGION, IAM_ROLE, mockMetrics);
+
+        verify(mockRedshiftConnection).rollback();
+    }
+
+    @Test
+    public void deleteAndCopyStillClosesAfterRollBackException() throws Exception {
+        when(mockPreparedStatement.execute()).thenThrow(new SQLException("Redshift hates you")).thenReturn(true);
+        doThrow(new SQLException("Test Exception")).when(mockRedshiftConnection).rollback();
+
+        redshiftJdbcClient.deleteAndCopy(FILE_COLUMN_NAMES, DESTINATION_TABLE, S3_BUCKET, S3_PREFIX,
+                S3_REGION, IAM_ROLE, mockMetrics);
+
+        verify(mockRedshiftConnection).close();
+    }
+
+    @Test(expected = DependencyException.class)
+    public void deleteAndCopyThrowsResourceNotFoundOnNullConnection() throws Exception {
+        when(mockRedshiftDataSource.getConnection()).thenReturn(null);
+
+        redshiftJdbcClient.deleteAndCopy(FILE_COLUMN_NAMES, DESTINATION_TABLE, S3_BUCKET, S3_PREFIX,
+                S3_REGION, IAM_ROLE, mockMetrics);
+    }
+
+    @Test
+    public void truncateGeneratesAndExecutesSqlCorrectly() throws Exception {
+        redshiftJdbcClient.truncate(DESTINATION_TABLE);
+
+        InOrder inOrder = inOrder(mockPreparedStatement, mockRedshiftConnection);
+        inOrder.verify(mockRedshiftConnection).prepareStatement(eq(TRUNCATE_SQL));
+        inOrder.verify(mockPreparedStatement).execute();
+        inOrder.verify(mockRedshiftConnection).close();
+    }
+
+    @Test
+    public void truncateClosesConnectionAfterSQLException() throws Exception {
+        when(mockPreparedStatement.execute()).thenThrow(new SQLException("Redshift hates you"));
+
+        redshiftJdbcClient.truncate(DESTINATION_TABLE);
+
+        verify(mockRedshiftConnection).close();
+    }
+
+    @Test(expected = DependencyException.class)
+    public void truncateThrowsResourceNotFoundOnNullConnection() throws Exception {
+        when(mockRedshiftDataSource.getConnection()).thenReturn(null);
+
+        redshiftJdbcClient.truncate(DESTINATION_TABLE);
     }
 }

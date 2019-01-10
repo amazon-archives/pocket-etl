@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -20,7 +20,9 @@ import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.joda.JodaModule;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.io.IOException;
 import java.util.function.Function;
@@ -44,10 +46,11 @@ import java.util.function.Function;
  * serializable or wait for jackson API to fix this.
  */
 public class JSONStringMapper<T> implements Function<String, T> {
-    private final static ObjectMapper objectMapper = new ObjectMapper()
+    private static final ObjectMapper objectMapper = new ObjectMapper()
             // Mapping java bean case conventions can be problematic when the second character is capitalized
             // (eg: getAString()). We are solving this problem by making case not matter.
-            .configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true).registerModule(new JodaModule());
+            .configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true)
+            .registerModules(new JodaModule(), new Jdk8Module(), new JavaTimeModule());
 
     private final ObjectReader objectReader;
 

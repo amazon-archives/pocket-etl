@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -29,10 +29,10 @@ import java.util.function.Supplier;
 /**
  * Loader implementation that loads data to a Redshift table by first writing it to S3 as CSV files, and then invoking
  * COPY on the Redshift instance to have it load the data into a temporary staging table, and then use a query to merge
- * and overwrite that loaded data into the final destination table with a transactional delete and insert query. A
- * random UUID is used as part of the S3 keys writen by this loader, so it is safe to use multiple constructed instances
- * of this loader in parallel, although if they are trying to insert into the same table this could cause database
- * contention.
+ * and overwrite that loaded data into the final destination table with a transactional delete and insert query. You can
+ * override this behaviour by specifying a load strategy, see {@link RedshiftLoadStrategy}. A random UUID is used as part
+ * of the S3 keys writen by this loader, so it is safe to use multiple constructed instances of this loader in parallel,
+ * although if they are trying to insert into the same table this could cause database contention.
  *
  * This loader is based on a ParallelLoader that writes to S3 using parallel loaders, so the more threads you give
  * this loader in your EtlStream, the faster it will write its data to S3. The part that copies the data from S3 into
@@ -83,18 +83,22 @@ import java.util.function.Supplier;
 @SuppressWarnings("WeakerAccess")
 @RequiredArgsConstructor
 public class RedshiftBulkLoader<T> extends WrappedLoader<T> {
-    private final static String DEFAULT_S3_PREFIX = "RedshiftCopyLoader";
+    private static final String DEFAULT_S3_PREFIX = "RedshiftCopyLoader";
+    private static final RedshiftLoadStrategy DEFAULT_LOAD_STRATEGY = RedshiftLoadStrategy.MERGE_INTO_EXISTING_DATA;
 
     private final ParallelLoader<T> wrappedParallelLoader;
 
     /**
      * Create a supplier of RedshiftBulkLoader objects that is based on a specific class to load.
+     *
      * @param classToLoad The class template for the objects being loaded.
      * @param <T> The type of object being loaded.
      * @return A newly constructed RedshiftBulkLoaderSupplier object.
      */
     public static <T> RedshiftBulkLoaderSupplier<T> supplierOf(Class<T> classToLoad) {
-        return new RedshiftBulkLoaderSupplier<>(null, classToLoad, null, null, null, null, null, null, null, null, null, null);
+        return new RedshiftBulkLoaderSupplier<>(null, classToLoad, null, null,
+                null, null, null, null, null, null,
+                null, null, DEFAULT_LOAD_STRATEGY, null);
     }
 
     @Override
@@ -116,6 +120,8 @@ public class RedshiftBulkLoader<T> extends WrappedLoader<T> {
         private final String redshiftIamRole;
         private final List<String> redshiftColumnNames;
         private final List<String> redshiftIndexColumnNames;
+        private final RedshiftLoadStrategy redshiftLoadStrategy;
+        private final RedshiftJdbcClient redshiftJdbcClient;
 
         /**
          * Required: Defines the name of the S3 bucket this loader should write its interim data to before copying it into
@@ -128,7 +134,7 @@ public class RedshiftBulkLoader<T> extends WrappedLoader<T> {
         public RedshiftBulkLoaderSupplier<T> withS3Bucket(String s3Bucket) {
             return new RedshiftBulkLoaderSupplier<>(s3Bucket, classToLoad, bufferSizeInBytes, amazonS3, s3Prefix, kmsArn,
                     redshiftDataSource, s3Region, redshiftTableName, redshiftIamRole, redshiftColumnNames,
-                    redshiftIndexColumnNames);
+                    redshiftIndexColumnNames, redshiftLoadStrategy, redshiftJdbcClient);
         }
 
         /**
@@ -141,7 +147,7 @@ public class RedshiftBulkLoader<T> extends WrappedLoader<T> {
         public RedshiftBulkLoaderSupplier<T> withBufferSizeInBytes(Integer bufferSizeInBytes) {
             return new RedshiftBulkLoaderSupplier<>(s3Bucket, classToLoad, bufferSizeInBytes, amazonS3, s3Prefix, kmsArn,
                     redshiftDataSource, s3Region, redshiftTableName, redshiftIamRole, redshiftColumnNames,
-                    redshiftIndexColumnNames);
+                    redshiftIndexColumnNames, redshiftLoadStrategy, redshiftJdbcClient);
         }
 
         /**
@@ -154,7 +160,7 @@ public class RedshiftBulkLoader<T> extends WrappedLoader<T> {
         public RedshiftBulkLoaderSupplier<T> withAmazonS3(AmazonS3 amazonS3) {
             return new RedshiftBulkLoaderSupplier<>(s3Bucket, classToLoad, bufferSizeInBytes, amazonS3, s3Prefix, kmsArn,
                     redshiftDataSource, s3Region, redshiftTableName, redshiftIamRole, redshiftColumnNames,
-                    redshiftIndexColumnNames);
+                    redshiftIndexColumnNames, redshiftLoadStrategy, redshiftJdbcClient);
         }
 
         /**
@@ -168,7 +174,7 @@ public class RedshiftBulkLoader<T> extends WrappedLoader<T> {
         public RedshiftBulkLoaderSupplier<T> withS3Prefix(String s3Prefix) {
             return new RedshiftBulkLoaderSupplier<>(s3Bucket, classToLoad, bufferSizeInBytes, amazonS3, s3Prefix, kmsArn,
                     redshiftDataSource, s3Region, redshiftTableName, redshiftIamRole, redshiftColumnNames,
-                    redshiftIndexColumnNames);
+                    redshiftIndexColumnNames, redshiftLoadStrategy, redshiftJdbcClient);
         }
 
         /**
@@ -182,7 +188,21 @@ public class RedshiftBulkLoader<T> extends WrappedLoader<T> {
         public RedshiftBulkLoaderSupplier<T> withKmsArn(String kmsArn) {
             return new RedshiftBulkLoaderSupplier<>(s3Bucket, classToLoad, bufferSizeInBytes, amazonS3, s3Prefix, kmsArn,
                     redshiftDataSource, s3Region, redshiftTableName, redshiftIamRole, redshiftColumnNames,
-                    redshiftIndexColumnNames);
+                    redshiftIndexColumnNames, redshiftLoadStrategy, redshiftJdbcClient);
+        }
+
+        /**
+         * Optional: Specifies the load strategy to be used for bulk upload to redshift. See {@link RedshiftLoadStrategy}
+         * for detailed information on different types of strategies. The default strategy is
+         * {@link RedshiftLoadStrategy#MERGE_INTO_EXISTING_DATA}.
+         *
+         * @param redshiftLoadStrategy type of upload to redshift.
+         * @return A copy of the current RedshiftBulkLoader with this property modified.
+         */
+        public RedshiftBulkLoaderSupplier<T> withLoadStrategy(RedshiftLoadStrategy redshiftLoadStrategy) {
+            return new RedshiftBulkLoaderSupplier<>(s3Bucket, classToLoad, bufferSizeInBytes, amazonS3, s3Prefix, kmsArn,
+                    redshiftDataSource, s3Region, redshiftTableName, redshiftIamRole, redshiftColumnNames,
+                    redshiftIndexColumnNames, redshiftLoadStrategy, redshiftJdbcClient);
         }
 
         /**
@@ -194,7 +214,7 @@ public class RedshiftBulkLoader<T> extends WrappedLoader<T> {
         public RedshiftBulkLoaderSupplier<T> withRedshiftDataSource(DataSource redshiftDataSource) {
             return new RedshiftBulkLoaderSupplier<>(s3Bucket, classToLoad, bufferSizeInBytes, amazonS3, s3Prefix, kmsArn,
                     redshiftDataSource, s3Region, redshiftTableName, redshiftIamRole, redshiftColumnNames,
-                    redshiftIndexColumnNames);
+                    redshiftIndexColumnNames, redshiftLoadStrategy, redshiftJdbcClient);
         }
 
         /**
@@ -207,7 +227,7 @@ public class RedshiftBulkLoader<T> extends WrappedLoader<T> {
         public RedshiftBulkLoaderSupplier<T> withS3Region(String s3Region) {
             return new RedshiftBulkLoaderSupplier<>(s3Bucket, classToLoad, bufferSizeInBytes, amazonS3, s3Prefix, kmsArn,
                     redshiftDataSource, s3Region, redshiftTableName, redshiftIamRole, redshiftColumnNames,
-                    redshiftIndexColumnNames);
+                    redshiftIndexColumnNames, redshiftLoadStrategy, redshiftJdbcClient);
         }
 
         /**
@@ -220,7 +240,7 @@ public class RedshiftBulkLoader<T> extends WrappedLoader<T> {
         public RedshiftBulkLoaderSupplier<T> withRedshiftTableName(String redshiftTableName) {
             return new RedshiftBulkLoaderSupplier<>(s3Bucket, classToLoad, bufferSizeInBytes, amazonS3, s3Prefix, kmsArn,
                     redshiftDataSource, s3Region, redshiftTableName, redshiftIamRole, redshiftColumnNames,
-                    redshiftIndexColumnNames);
+                    redshiftIndexColumnNames, redshiftLoadStrategy, redshiftJdbcClient);
         }
 
         /**
@@ -233,7 +253,7 @@ public class RedshiftBulkLoader<T> extends WrappedLoader<T> {
         public RedshiftBulkLoaderSupplier<T> withRedshiftIamRole(String redshiftIamRole) {
             return new RedshiftBulkLoaderSupplier<>(s3Bucket, classToLoad, bufferSizeInBytes, amazonS3, s3Prefix, kmsArn,
                     redshiftDataSource, s3Region, redshiftTableName, redshiftIamRole, redshiftColumnNames,
-                    redshiftIndexColumnNames);
+                    redshiftIndexColumnNames, redshiftLoadStrategy, redshiftJdbcClient);
         }
 
         /**
@@ -250,7 +270,7 @@ public class RedshiftBulkLoader<T> extends WrappedLoader<T> {
         public RedshiftBulkLoaderSupplier<T> withRedshiftColumnNames(List<String> redshiftColumnNames) {
             return new RedshiftBulkLoaderSupplier<>(s3Bucket, classToLoad, bufferSizeInBytes, amazonS3, s3Prefix, kmsArn,
                     redshiftDataSource, s3Region, redshiftTableName, redshiftIamRole, redshiftColumnNames,
-                    redshiftIndexColumnNames);
+                    redshiftIndexColumnNames, redshiftLoadStrategy, redshiftJdbcClient);
         }
 
         /**
@@ -267,7 +287,14 @@ public class RedshiftBulkLoader<T> extends WrappedLoader<T> {
         public RedshiftBulkLoaderSupplier<T> withRedshiftIndexColumnNames(List<String> redshiftIndexColumnNames) {
             return new RedshiftBulkLoaderSupplier<>(s3Bucket, classToLoad, bufferSizeInBytes, amazonS3, s3Prefix, kmsArn,
                     redshiftDataSource, s3Region, redshiftTableName, redshiftIamRole, redshiftColumnNames,
-                    redshiftIndexColumnNames);
+                    redshiftIndexColumnNames, redshiftLoadStrategy, redshiftJdbcClient);
+        }
+
+        // Visible for testing.
+        RedshiftBulkLoaderSupplier<T> withRedshiftJdbcClient(RedshiftJdbcClient redshiftJdbcClient) {
+            return new RedshiftBulkLoaderSupplier<>(s3Bucket, classToLoad, bufferSizeInBytes, amazonS3, s3Prefix, kmsArn,
+                    redshiftDataSource, s3Region, redshiftTableName, redshiftIamRole, redshiftColumnNames,
+                    redshiftIndexColumnNames, redshiftLoadStrategy, redshiftJdbcClient);
         }
 
         /**
@@ -309,13 +336,24 @@ public class RedshiftBulkLoader<T> extends WrappedLoader<T> {
                 loaderSupplier = loaderSupplier.withSSEKmsArn(kmsArn);
             }
 
-            final RedshiftJdbcClient redshiftJdbcClient = new RedshiftJdbcClient(redshiftDataSource);
+            RedshiftJdbcClient redshiftJdbcClient = this.redshiftJdbcClient == null ? new RedshiftJdbcClient(redshiftDataSource) : this.redshiftJdbcClient;
 
             return new RedshiftBulkLoader<>(ParallelLoader.of(loaderSupplier)
                     .withOnCloseCallback((dataWasLoaded, parentMetrics) -> {
                         if (dataWasLoaded) {
-                            redshiftJdbcClient.copyAndMerge(redshiftColumnNames, redshiftIndexColumnNames,
-                                    redshiftTableName, s3Bucket, finalS3Prefix, s3Region, redshiftIamRole, parentMetrics);
+                            switch (redshiftLoadStrategy) {
+                                case MERGE_INTO_EXISTING_DATA:
+                                    redshiftJdbcClient.copyAndMerge(redshiftColumnNames, redshiftIndexColumnNames,
+                                            redshiftTableName, s3Bucket, finalS3Prefix, s3Region, redshiftIamRole,
+                                            parentMetrics);
+                                    break;
+                                case CLOBBER_EXISTING_DATA:
+                                    redshiftJdbcClient.deleteAndCopy(redshiftColumnNames, redshiftTableName, s3Bucket,
+                                            finalS3Prefix, s3Region, redshiftIamRole, parentMetrics);
+                                    break;
+                            }
+                        } else if (redshiftLoadStrategy.equals(RedshiftLoadStrategy.CLOBBER_EXISTING_DATA)) {
+                            redshiftJdbcClient.truncate(redshiftTableName);
                         }
                     }));
         }
