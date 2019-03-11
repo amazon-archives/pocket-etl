@@ -15,27 +15,32 @@
 
 package com.amazon.pocketEtl.loader;
 
-import com.amazon.pocketEtl.EtlTestBase;
-import com.amazon.pocketEtl.Loader;
-import com.amazon.pocketEtl.integration.RedshiftJdbcClient;
-import com.amazonaws.services.s3.AmazonS3;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+
+import java.util.List;
+
+import javax.sql.DataSource;
+
 import com.google.common.collect.ImmutableList;
-import org.junit.Before;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
-import javax.sql.DataSource;
-import java.util.List;
-import java.util.function.Supplier;
+import com.amazon.pocketEtl.EtlMetrics;
+import com.amazon.pocketEtl.EtlTestBase;
+import com.amazon.pocketEtl.Loader;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+import com.amazon.pocketEtl.integration.RedshiftJdbcClient;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
+import com.amazonaws.services.s3.AmazonS3;
 
 @RunWith(MockitoJUnitRunner.class)
 public class RedshiftBulkLoaderTest extends EtlTestBase {
@@ -124,6 +129,26 @@ public class RedshiftBulkLoaderTest extends EtlTestBase {
         verify(mockRedshiftJdbcClient).copyAndMerge(eq(EXTRACT_COLUMN_NAMES), eq(KEY_COLUMN_NAMES), eq(DESTINATION_TABLE_NAME),
                 eq(S3_BUCKET), anyString(), eq(S3_REGION), eq(IAM_ROLE), eq(mockMetrics));
     }
+
+    @Test(expected = UnrecoverableStreamFailureException.class)
+    public void loaderThrowsUnrecoverableStreamFailureExceptionOnRedshiftProblem() throws Exception {
+        doThrow(new RuntimeException("Something went wrong")).when(mockRedshiftJdbcClient)
+                                                             .copyAndMerge(anyList(), anyList(), anyString(),
+                                                                           anyString(), anyString(), anyString(),
+                                                                           anyString(), any(EtlMetrics.class));
+
+        Loader<TestDTO> redshiftLoader = getMinimalLoaderSupplier()
+            .withAmazonS3(mockAmazonS3)
+            .withS3Prefix(S3_PREFIX)
+            .withRedshiftJdbcClient(mockRedshiftJdbcClient)
+            .get();
+
+
+        redshiftLoader.open(etlProfilingScope.getMetrics());
+        redshiftLoader.load(OBJECT_TO_WRITE);
+        redshiftLoader.close();
+    }
+
 
     @Test
     public void newRedshiftViaS3LoaderCreatesLoaderWhichCallsCopyAndMergeOnCloseIfDataWasLoadedWithMergeIntoExistingDataStrategy() throws Exception {

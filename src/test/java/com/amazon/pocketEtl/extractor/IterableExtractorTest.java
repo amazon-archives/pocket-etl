@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -17,12 +17,13 @@ package com.amazon.pocketEtl.extractor;
 
 import com.amazon.pocketEtl.EtlTestBase;
 import com.amazon.pocketEtl.Extractor;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
 import com.google.common.collect.ImmutableList;
 import org.junit.Test;
 
 import java.util.Iterator;
 import java.util.Optional;
-import java.util.prefs.BackingStoreException;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertThat;
@@ -43,12 +44,12 @@ public class IterableExtractorTest extends EtlTestBase {
     }
 
     @Test(expected = IllegalStateException.class)
-    public void callingNextBeforeOpenThrowsIllegalStateException() throws Exception {
+    public void callingNextBeforeOpenThrowsIllegalStateException() {
         IterableExtractor.of(ImmutableList.of("1", "2", "3")).next();
     }
 
-    @Test(expected = BackingStoreException.class)
-    public void nextThrowsRuntimeExceptionThrowsAsBackingStoreException() throws Exception {
+    @Test(expected = UnrecoverableStreamFailureException.class)
+    public void nextThrowsRuntimeExceptionThrowsAsUnrecoverableStreamFailureException() {
         Iterable mockIterable = mock(Iterable.class);
         Iterator mockIterator = mock(Iterator.class);
         when(mockIterable.iterator()).thenReturn(mockIterator);

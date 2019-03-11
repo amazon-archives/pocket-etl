@@ -16,6 +16,7 @@
 package com.amazon.pocketEtl.loader;
 
 import com.amazon.pocketEtl.Loader;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
 import com.amazon.pocketEtl.integration.RedshiftJdbcClient;
 import com.amazonaws.services.s3.AmazonS3;
 import lombok.AccessLevel;
@@ -340,20 +341,26 @@ public class RedshiftBulkLoader<T> extends WrappedLoader<T> {
 
             return new RedshiftBulkLoader<>(ParallelLoader.of(loaderSupplier)
                     .withOnCloseCallback((dataWasLoaded, parentMetrics) -> {
-                        if (dataWasLoaded) {
-                            switch (redshiftLoadStrategy) {
-                                case MERGE_INTO_EXISTING_DATA:
-                                    redshiftJdbcClient.copyAndMerge(redshiftColumnNames, redshiftIndexColumnNames,
-                                            redshiftTableName, s3Bucket, finalS3Prefix, s3Region, redshiftIamRole,
-                                            parentMetrics);
-                                    break;
-                                case CLOBBER_EXISTING_DATA:
-                                    redshiftJdbcClient.deleteAndCopy(redshiftColumnNames, redshiftTableName, s3Bucket,
-                                            finalS3Prefix, s3Region, redshiftIamRole, parentMetrics);
-                                    break;
+                        try {
+                            if (dataWasLoaded) {
+                                switch (redshiftLoadStrategy) {
+                                    case MERGE_INTO_EXISTING_DATA:
+                                        redshiftJdbcClient.copyAndMerge(redshiftColumnNames, redshiftIndexColumnNames,
+                                                                        redshiftTableName, s3Bucket, finalS3Prefix, s3Region, redshiftIamRole,
+                                                                        parentMetrics);
+                                        break;
+                                    case CLOBBER_EXISTING_DATA:
+                                        redshiftJdbcClient.deleteAndCopy(redshiftColumnNames, redshiftTableName, s3Bucket,
+                                                                         finalS3Prefix, s3Region, redshiftIamRole, parentMetrics);
+                                        break;
+                                }
+                            } else if (redshiftLoadStrategy.equals(RedshiftLoadStrategy.CLOBBER_EXISTING_DATA)) {
+                                redshiftJdbcClient.truncate(redshiftTableName);
                             }
-                        } else if (redshiftLoadStrategy.equals(RedshiftLoadStrategy.CLOBBER_EXISTING_DATA)) {
-                            redshiftJdbcClient.truncate(redshiftTableName);
+                        } catch (RuntimeException e) {
+                            // Any kind of failure writing the data to Redshift constitutes a complete job failure due
+                            // to the batchy nature of this operation
+                            throw new UnrecoverableStreamFailureException(e);
                         }
                     }));
         }

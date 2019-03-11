@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package com.amazon.pocketEtl.loader;
 import com.amazon.pocketEtl.EtlMetrics;
 import com.amazon.pocketEtl.EtlProfilingScope;
 import com.amazon.pocketEtl.Loader;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
@@ -189,7 +191,7 @@ public class S3FastLoader<T> implements Loader<T> {
                     logger.error(e);
                     scope.addCounter(e.getClass().getSimpleName(), 1);
                     emitSuccessAndFailureMetrics(scope, false);
-                    throw new RuntimeException("Exception caught trying to write object to S3: ", e);
+                    throw new UnrecoverableStreamFailureException("Exception caught trying to write object to S3: ", e);
             }
         }
     }

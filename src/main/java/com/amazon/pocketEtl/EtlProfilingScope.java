@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -46,10 +46,8 @@ import org.apache.commons.logging.LogFactory;
  */
 public class EtlProfilingScope implements AutoCloseable {
     private final static Log logger = LogFactory.getLog(EtlProfilingScope.class);
-    private final static ThreadLocal<EtlMetrics> rootMetrics = new ThreadLocal<>();
     private final EtlMetrics ourMetrics;
     private final long metricsStart;
-    private final boolean isRoot;
     private final String scopeName;
     private boolean closed = false;
 
@@ -68,13 +66,6 @@ public class EtlProfilingScope implements AutoCloseable {
             ourMetrics = metrics.createChildMetrics();
         } else {
             ourMetrics = metrics;
-        }
-
-        if (rootMetrics.get() == null) {
-            rootMetrics.set(ourMetrics);
-            isRoot = true;
-        } else {
-            isRoot = false;
         }
 
         this.scopeName = scopeName;
@@ -116,10 +107,6 @@ public class EtlProfilingScope implements AutoCloseable {
             return;
         }
         closed = true;
-
-        if (isRoot) {
-            rootMetrics.remove();
-        }
 
         if (ourMetrics != null) {
             final long metricsEnd = System.currentTimeMillis();

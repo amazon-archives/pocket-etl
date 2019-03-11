@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -15,10 +15,10 @@
 
 package com.amazon.pocketEtl.core.producer;
 
-import com.amazon.pocketEtl.EtlMetrics;
-
 import javax.annotation.Nullable;
-import java.util.prefs.BackingStoreException;
+
+import com.amazon.pocketEtl.EtlMetrics;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
 
 /**
  * Producer interface for ETL system. A producer will, once started, continue to produce work until the supply of
@@ -28,10 +28,11 @@ public interface EtlProducer extends AutoCloseable {
     /**
      * Produce objects until the source of objects has been exhausted.
      *
-     * @throws BackingStoreException If the backing store this producer is producing work from has a problem.
+     * @throws UnrecoverableStreamFailureException An unrecoverable problem that affects the entire stream has been
+     * detected and the stream needs to be aborted.
      * @throws IllegalStateException If the producer is not in a state capable of producing new work.
      */
-    void produce() throws BackingStoreException, IllegalStateException;
+    void produce() throws UnrecoverableStreamFailureException, IllegalStateException;
 
     /**
      * Signal the producer to complete its work and free any resources allocated for the production of work.

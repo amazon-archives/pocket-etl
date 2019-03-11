@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 package com.amazon.pocketEtl.extractor;
 
 import com.amazon.pocketEtl.EtlTestBase;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
 import com.google.common.collect.ImmutableMap;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -40,7 +42,6 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.prefs.BackingStoreException;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.sameInstance;
@@ -327,8 +328,8 @@ public class SqlExtractorTest extends EtlTestBase {
         assertThat(sqlExtractor.next(), equalTo(Optional.empty()));
     }
 
-    @Test(expected = BackingStoreException.class)
-    public void nextThrowsBackingStoreExceptionIfResultSetNextThrowsSqlException() throws Exception {
+    @Test(expected = UnrecoverableStreamFailureException.class)
+    public void nextThrowsUnrecoverableStreamFailureExceptionIfResultSetNextThrowsSqlException() throws Exception {
         SqlExtractor<BasicDTO> sqlExtractor = getBasicDTOSqlExtractor();
 
         when(mockResultSet.next()).thenThrow(new SQLException());
@@ -347,7 +348,7 @@ public class SqlExtractorTest extends EtlTestBase {
     }
 
     @Test(expected = IllegalStateException.class)
-    public void nextThrowsIllegalStateExceptionIfNotOpen() throws Exception {
+    public void nextThrowsIllegalStateExceptionIfNotOpen() {
         SqlExtractor<BasicDTO> sqlExtractor =
                 SqlExtractor.of(mockDatasource, EXTRACT_SQL, BasicDTO.class)
                         .withSqlParameters(SQL_PARAMETERS);
@@ -377,7 +378,7 @@ public class SqlExtractorTest extends EtlTestBase {
 
 
     @Test
-    public void executeQueryEmitsTimingMetricsForExecuteQuery() throws Exception {
+    public void executeQueryEmitsTimingMetricsForExecuteQuery() {
         SqlExtractor<BasicDTO> sqlExtractor = getBasicDTOSqlExtractor();
 
         sqlExtractor.next();

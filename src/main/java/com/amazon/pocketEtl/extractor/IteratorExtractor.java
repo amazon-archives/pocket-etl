@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -15,17 +15,17 @@
 
 package com.amazon.pocketEtl.extractor;
 
-import com.amazon.pocketEtl.Extractor;
-import lombok.AccessLevel;
-import lombok.RequiredArgsConstructor;
-
 import java.util.Iterator;
 import java.util.Optional;
+
+import com.amazon.pocketEtl.Extractor;
+
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 
 /**
  * Simple static builder that constructs an extractor around a simple Java Iterator object.
  */
-@SuppressWarnings("WeakerAccess")
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public class IteratorExtractor<T> implements Extractor<T> {
     private final Iterator<T> iterator;

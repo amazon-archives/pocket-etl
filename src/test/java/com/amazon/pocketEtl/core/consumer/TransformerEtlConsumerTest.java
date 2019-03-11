@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
@@ -66,11 +67,12 @@ public class TransformerEtlConsumerTest extends EtlTestBase {
     public void consumeTransformsAndSendsASingleObjectDownstream() {
         when(mockTransformer.transform(any(TestDTO.class))).thenReturn(ImmutableList.of(testDTO2));
         transformerConsumer.open(mockMetrics);
-        transformerConsumer.consume(new EtlStreamObject().with(testDTO1));
+        transformerConsumer.consume(EtlStreamObject.of(testDTO1));
 
         verify(mockTransformer, times(1)).open(any(EtlMetrics.class));
         verify(mockTransformer, times(1)).transform(eq(testDTO1));
-        verify(mockEtlConsumer, times(1)).consume(eq(new EtlStreamObject().with(testDTO2)));
+        verify(mockEtlConsumer, times(1)).consume(argThat(
+            etlStreamObject -> testDTO2.equals(etlStreamObject.get(TestDTO.class))));
         verifyNoMoreInteractions(mockTransformer);
     }
 
@@ -78,12 +80,14 @@ public class TransformerEtlConsumerTest extends EtlTestBase {
     public void consumeTransformsAndSendsMultipleObjectsDownstream() {
         when(mockTransformer.transform(any(TestDTO.class))).thenReturn(ImmutableList.of(testDTO2, testDTO3));
         transformerConsumer.open(mockMetrics);
-        transformerConsumer.consume(new EtlStreamObject().with(testDTO1));
+        transformerConsumer.consume(EtlStreamObject.of(testDTO1));
 
         verify(mockTransformer, times(1)).open(any(EtlMetrics.class));
         verify(mockTransformer, times(1)).transform(eq(testDTO1));
-        verify(mockEtlConsumer, times(1)).consume(eq(new EtlStreamObject().with(testDTO2)));
-        verify(mockEtlConsumer, times(1)).consume(eq(new EtlStreamObject().with(testDTO3)));
+        verify(mockEtlConsumer, times(1)).consume(argThat(
+            etlStreamObject -> testDTO2.equals(etlStreamObject.get(TestDTO.class))));
+        verify(mockEtlConsumer, times(1)).consume(argThat(
+            etlStreamObject -> testDTO3.equals(etlStreamObject.get(TestDTO.class))));
         verifyNoMoreInteractions(mockTransformer);
     }
 
@@ -92,9 +96,10 @@ public class TransformerEtlConsumerTest extends EtlTestBase {
         when(mockTransformer.transform(any(TestDTO.class))).thenThrow(new RuntimeException("soooo fast"));
 
         transformerConsumer.open(mockMetrics);
-        transformerConsumer.consume(new EtlStreamObject().with(testDTO1));
+        transformerConsumer.consume(EtlStreamObject.of(testDTO1));
 
-        verify(mockErrorEtlConsumer).consume(eq(new EtlStreamObject().with(testDTO1)));
+        verify(mockErrorEtlConsumer).consume(argThat(
+            etlStreamObject -> testDTO1.equals(etlStreamObject.get(TestDTO.class))));
     }
 
     @Test

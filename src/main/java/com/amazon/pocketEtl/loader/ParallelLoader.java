@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package com.amazon.pocketEtl.loader;
 import com.amazon.pocketEtl.EtlMetrics;
 import com.amazon.pocketEtl.EtlProfilingScope;
 import com.amazon.pocketEtl.Loader;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import org.apache.logging.log4j.Logger;
@@ -101,6 +103,8 @@ public class ParallelLoader<T> implements Loader<T> {
             try {
                 Loader<T> loader = getLoaderForCurrentThread();
                 loader.load(objectToLoad);
+            } catch (UnrecoverableStreamFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.warn("Exception thrown loading object: ", e);
                 throw new RuntimeException(e);
@@ -128,13 +132,18 @@ public class ParallelLoader<T> implements Loader<T> {
             activeLoaders.forEach(loader -> {
                 try {
                     loader.close();
+                } catch (UnrecoverableStreamFailureException e) {
+                    throw e;
                 } catch (Exception ignored2) {
+                    // No-op
                 }
             });
 
             if (closeCallback != null) {
                 try {
                     closeCallback.accept(dataWasLoaded, parentMetrics);
+                } catch (UnrecoverableStreamFailureException e) {
+                    throw e;
                 } catch (Exception e) {
                     logger.error("Exception thrown while executing the closeCallback: ", e);
                     throw new RuntimeException(e);

@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@ package com.amazon.pocketEtl;
 
 import javax.annotation.Nullable;
 
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
 /**
  * Interface for a Loader that loads (writes) objects into final its final destination.
  *
@@ -28,8 +30,10 @@ public interface Loader<T> extends AutoCloseable {
      * Load a single object to to the destination store/service.
      *
      * @param objectToLoad The object to be loaded.
+     * @throws UnrecoverableStreamFailureException An unrecoverable problem that affects the entire stream has been
+     * detected and the stream needs to be aborted.
      */
-    void load(T objectToLoad);
+    void load(T objectToLoad) throws UnrecoverableStreamFailureException;
 
     /**
      * Signal the loader to prepare to load objects.

@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ import com.amazon.pocketEtl.EtlMetrics;
 import com.amazon.pocketEtl.EtlProfilingScope;
 import com.amazon.pocketEtl.core.EtlStreamObject;
 import com.amazon.pocketEtl.core.executor.EtlExecutor;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -26,12 +28,14 @@ import org.apache.logging.log4j.Logger;
 
 import static org.apache.logging.log4j.LogManager.getLogger;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 /**
  * Consumer implementation that wraps another consumer and facilitates parallel consumption. The wrapped consumer's
  * consume() method must be threadsafe for this to work. Note that open() and close() are not executed in parallel
  * threads.
  */
-@EqualsAndHashCode
+@EqualsAndHashCode(exclude = "abortStreamException")
 class ExecutorEtlConsumer implements EtlConsumer {
     private final static Logger logger = getLogger(ExecutorEtlConsumer.class);
 
@@ -41,6 +45,7 @@ class ExecutorEtlConsumer implements EtlConsumer {
     private final EtlConsumer wrappedEtlConsumer;
 
     private final EtlExecutor etlExecutor;
+    private AtomicReference<UnrecoverableStreamFailureException> abortStreamException = new AtomicReference<>();
     private EtlMetrics parentMetrics = null;
 
     /**
@@ -68,6 +73,8 @@ class ExecutorEtlConsumer implements EtlConsumer {
             etlExecutor.shutdown();
             wrappedEtlConsumer.close();
         }
+
+        checkForAbortedStream();
     }
 
     /**
@@ -76,9 +83,13 @@ class ExecutorEtlConsumer implements EtlConsumer {
      * method is threadsafe.
      *
      * @param objectToConsume The object to be consumed.
+     * @throws UnrecoverableStreamFailureException An unrecoverable problem that affects the entire stream has been
+     *                                             detected and the stream needs to be aborted.
      */
     @Override
-    public void consume(EtlStreamObject objectToConsume) {
+    public void consume(EtlStreamObject objectToConsume) throws UnrecoverableStreamFailureException {
+        checkForAbortedStream();
+
         if (etlExecutor.isShutdown()) {
             IllegalStateException e = new IllegalStateException("Transformer was closed and cannot receive more loader requests");
             logger.error("Error inside multi-threaded transformation: ", e);
@@ -86,7 +97,17 @@ class ExecutorEtlConsumer implements EtlConsumer {
         }
 
         try (EtlProfilingScope ignored = new EtlProfilingScope(parentMetrics, "ExecutorConsumer." + name + ".consume")) {
-            etlExecutor.submit(() -> wrappedEtlConsumer.consume(objectToConsume), parentMetrics);
+            etlExecutor.submit(() -> {
+                    if (abortStreamException.get() != null) {
+                        return;
+                    }
+
+                    try {
+                        wrappedEtlConsumer.consume(objectToConsume);
+                    } catch (UnrecoverableStreamFailureException e) {
+                        abortStreamException.set(e);
+                    }
+                }, parentMetrics);
         }
     }
 
@@ -99,6 +120,12 @@ class ExecutorEtlConsumer implements EtlConsumer {
         try (EtlProfilingScope ignored = new EtlProfilingScope(parentMetrics, "ExecutorConsumer." + name + ".open")) {
             this.parentMetrics = parentMetrics;
             wrappedEtlConsumer.open(parentMetrics);
+        }
+    }
+
+    private void checkForAbortedStream() {
+        if (abortStreamException.get() != null) {
+            throw abortStreamException.get();
         }
     }
 }

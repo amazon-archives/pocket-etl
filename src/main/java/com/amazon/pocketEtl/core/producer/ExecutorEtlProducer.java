@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -19,10 +19,13 @@ import com.amazon.pocketEtl.EtlMetrics;
 import com.amazon.pocketEtl.EtlProfilingScope;
 import com.amazon.pocketEtl.core.executor.EtlExecutor;
 import com.amazon.pocketEtl.exception.GenericEtlException;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
 import lombok.EqualsAndHashCode;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.apache.logging.log4j.LogManager.getLogger;
 
@@ -31,7 +34,7 @@ import static org.apache.logging.log4j.LogManager.getLogger;
  * complex chain of Producers and Consumers that constitutes an ETL job. The job would be considered complete once all
  * the producers have exhausted their supply of work and been closed.
  */
-@EqualsAndHashCode
+@EqualsAndHashCode(exclude = "abortStreamException")
 class ExecutorEtlProducer implements EtlProducer {
     private final static Logger logger = getLogger(ExecutorEtlProducer.class);
 
@@ -39,6 +42,7 @@ class ExecutorEtlProducer implements EtlProducer {
     private final Collection<EtlProducer> etlProducers;
     private final EtlExecutor etlExecutor;
 
+    private AtomicReference<UnrecoverableStreamFailureException> abortStreamException = new AtomicReference<>();
     private EtlMetrics parentMetrics = null;
 
     /**
@@ -68,12 +72,16 @@ class ExecutorEtlProducer implements EtlProducer {
             etlProducers.forEach(producer -> etlExecutor.submit(() -> {
                 try {
                     producer.produce();
-                } catch (Exception e) {
+                } catch (UnrecoverableStreamFailureException e) {
+                    abortStreamException.set(e);
+                } catch (RuntimeException e) {
                     logger.error("Error extracting data: ", e);
                 }
 
                 try {
                     producer.close();
+                } catch (UnrecoverableStreamFailureException e) {
+                    abortStreamException.set(e);
                 } catch (Exception e) {
                     logger.error("Error closing producer: ", e);
                 }
@@ -94,6 +102,10 @@ class ExecutorEtlProducer implements EtlProducer {
                 etlExecutor.shutdown();
             } catch (GenericEtlException e) {
                 logger.error("Error shutting down executor: ", e);
+            }
+
+            if (abortStreamException.get() != null) {
+                throw abortStreamException.get();
             }
         }
     }

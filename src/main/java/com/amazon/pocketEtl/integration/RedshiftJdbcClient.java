@@ -133,12 +133,7 @@ public class RedshiftJdbcClient {
                 if (connection != null) {
                     // Attempt a rollback if something went wrong
                     logger.warn("SQL exception thrown during Redshift copyAndMerge operation, rolling back transaction", e);
-
-                    try {
-                        connection.rollback();
-                    } catch (SQLException nestedException) {
-                        logger.warn("SQL exception thrown during rollback", nestedException);
-                    }
+                    attemptRollbackOnException(connection, e);
                 }
             } finally {
                 // If the connection is still open then attempt to drop the staging table if it exists then close it
@@ -189,12 +184,7 @@ public class RedshiftJdbcClient {
                 if (connection != null) {
                     // Attempt a rollback if something went wrong
                     logger.warn("SQL exception thrown during Redshift deleteAndCopy operation, rolling back transaction", e);
-
-                    try {
-                        connection.rollback();
-                    } catch (SQLException nestedException) {
-                        logger.warn("SQL exception thrown during rollback", nestedException);
-                    }
+                    attemptRollbackOnException(connection, e);
                 }
             } finally {
                 try {
@@ -224,6 +214,7 @@ public class RedshiftJdbcClient {
             }
         } catch (SQLException e) {
             logger.warn("SQL exception thrown during Redshift truncate operation.", e);
+            throw new RuntimeException(e);
         }
     }
 
@@ -258,13 +249,13 @@ public class RedshiftJdbcClient {
         }
     }
 
-    private String performSqlCopySubstitutions(String sql, String temporaryTableName, String combinedColumnNames,
+    private String performSqlCopySubstitutions(String temporaryTableName, String combinedColumnNames,
                                                String s3SourceUrl, String iamRole, String awsS3Region) {
-        return sql.replace(STAGE_TABLE_NAME_TOKEN, temporaryTableName)
-                .replace(COLUMN_LIST_TOKEN, combinedColumnNames)
-                .replace(S3_SOURCE_URL_TOKEN, s3SourceUrl)
-                .replace(IAM_ROLE_TOKEN, iamRole)
-                .replace(AWS_S3_REGION_TOKEN, awsS3Region);
+        return RedshiftJdbcClient.COPY_SQL.replace(STAGE_TABLE_NAME_TOKEN, temporaryTableName)
+                                          .replace(COLUMN_LIST_TOKEN, combinedColumnNames)
+                                          .replace(S3_SOURCE_URL_TOKEN, s3SourceUrl)
+                                          .replace(IAM_ROLE_TOKEN, iamRole)
+                                          .replace(AWS_S3_REGION_TOKEN, awsS3Region);
     }
 
     private void copyFromS3ToRedshiftTable(Connection connection, List<String> fileColumnNames, String destinationTableName,
@@ -272,15 +263,16 @@ public class RedshiftJdbcClient {
 
         String combinedColumnNames = String.join(",", fileColumnNames);
         try (PreparedStatement preparedStatement = connection.prepareStatement(
-                performSqlCopySubstitutions(COPY_SQL, destinationTableName, combinedColumnNames, s3SourceUrl,
-                        iamRole, awsS3Region))) {
+                performSqlCopySubstitutions(destinationTableName, combinedColumnNames, s3SourceUrl,
+                                            iamRole, awsS3Region))) {
             preparedStatement.execute();
         }
     }
 
-    private String performSqlDeleteFromTableSubstitutions(String sql, String columnMatchSQL, String temporaryTableName,
+    private String performSqlDeleteFromTableSubstitutions(String columnMatchSQL, String temporaryTableName,
                                                           String destinationTableName) {
-        return performSqlTableSubstitutions(sql, temporaryTableName, destinationTableName)
+        return performSqlTableSubstitutions(RedshiftJdbcClient.DELETE_FROM_TABLE_USING_TEMPORARY_TABLE,
+                                            temporaryTableName, destinationTableName)
                 .replace(COLUMN_MATCH_TOKEN, columnMatchSQL);
     }
 
@@ -292,8 +284,8 @@ public class RedshiftJdbcClient {
                         columnName))
                 .collect(Collectors.joining(" and "));
         try (PreparedStatement preparedStatement = connection.prepareStatement(
-                performSqlDeleteFromTableSubstitutions(DELETE_FROM_TABLE_USING_TEMPORARY_TABLE, columnMatchSQL,
-                        temporaryTableName, destinationTableName))) {
+                performSqlDeleteFromTableSubstitutions(columnMatchSQL,
+                                                       temporaryTableName, destinationTableName))) {
             preparedStatement.execute();
         }
     }
@@ -311,5 +303,16 @@ public class RedshiftJdbcClient {
                 performSqlTableSubstitutions(INSERT_FROM_TEMPORARY_TABLE, temporaryTableName, destinationTableName))) {
             preparedStatement.execute();
         }
+    }
+
+    private void attemptRollbackOnException(Connection connection, Throwable cause) {
+        try {
+            connection.rollback();
+        } catch (SQLException nestedException) {
+            logger.warn("SQL exception thrown during rollback", nestedException);
+            throw new RuntimeException(nestedException);
+        }
+
+        throw new RuntimeException(cause);
     }
 }

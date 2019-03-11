@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -15,16 +15,17 @@
 
 package com.amazon.pocketEtl;
 
-import com.amazon.pocketEtl.core.consumer.EtlConsumer;
-import com.amazon.pocketEtl.core.producer.EtlProducer;
-import lombok.AccessLevel;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-
-import javax.annotation.Nonnull;
 import java.util.Arrays;
 import java.util.Collection;
+
+import javax.annotation.Nonnull;
+
+import com.amazon.pocketEtl.core.consumer.EtlConsumer;
+import com.amazon.pocketEtl.core.producer.EtlProducer;
+
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 
 /**
  * Abstract class that represents the producer stage in an EtlStream. An EtlStream consists of a producer stage chained
@@ -32,7 +33,6 @@ import java.util.Collection;
  */
 @Getter(AccessLevel.PACKAGE)
 @RequiredArgsConstructor
-@EqualsAndHashCode
 public abstract class EtlProducerStage {
     /**
      * Static constructor for an EtlProducerStage that extracts data and puts it on the stream. Used as a component in an

@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -17,7 +17,8 @@ package com.amazon.pocketEtl;
 
 import javax.annotation.Nullable;
 import java.util.Optional;
-import java.util.prefs.BackingStoreException;
+
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
 
 /**
  * Interface for an extractor object that either extracts objects from some kind of storage.
@@ -31,9 +32,10 @@ public interface Extractor<T> extends AutoCloseable {
      *
      * @return An optional object that contains the next extracted object or empty if there are no objects left to be
      * extracted.
-     * @throws BackingStoreException If there was a problem extracting the object from the backing store.
+     * @throws UnrecoverableStreamFailureException An unrecoverable problem that affects the entire stream has been
+     * detected and the stream needs to be aborted.
      */
-    Optional<T> next() throws BackingStoreException;
+    Optional<T> next() throws UnrecoverableStreamFailureException;
 
     /**
      * Signal the extractor to prepare to extract objects.

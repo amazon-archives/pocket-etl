@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@ package com.amazon.pocketEtl.loader;
 
 import com.amazon.pocketEtl.EtlMetrics;
 import com.amazon.pocketEtl.EtlTestBase;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.PutObjectRequest;
@@ -225,14 +227,15 @@ public class S3FastLoaderTest extends EtlTestBase {
     }
 
     @Test
-    public void writeWithExceptionThrowsRuntimeException() {
+    public void writeWithExceptionThrowsUnrecoverableStreamFailureException() {
         AmazonClientException s3Exception = new AmazonClientException("oh no!");
         reset(s3Client);
         when(s3Client.putObject(any(PutObjectRequest.class))).thenThrow(s3Exception);
 
         try {
             testS3LoaderWithStrings("123456789ABCDEF");
-        } catch (RuntimeException e) {
+            fail("Expected UnrecoverableStreamFailureException");
+        } catch (UnrecoverableStreamFailureException e) {
             assertThat(e.getCause(), is(s3Exception));
         }
 
@@ -240,7 +243,7 @@ public class S3FastLoaderTest extends EtlTestBase {
     }
 
     @Test
-    public void closeWithExceptionThrowsException() throws Exception {
+    public void closeWithExceptionThrowsUnrecoverableStreamFailureException() throws Exception {
         AmazonClientException s3Exception = new AmazonClientException("oh no!");
         reset(s3Client);
         when(s3Client.putObject(any(PutObjectRequest.class))).thenThrow(s3Exception);
@@ -248,7 +251,8 @@ public class S3FastLoaderTest extends EtlTestBase {
 
         try {
             s3FastLoader.close();
-        } catch (RuntimeException e) {
+            fail("Expected UnrecoverableStreamFailureException");
+        } catch (UnrecoverableStreamFailureException e) {
             assertThat(e.getCause(), is(s3Exception));
         }
 

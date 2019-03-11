@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ import com.amazon.pocketEtl.EtlMetrics;
 import com.amazon.pocketEtl.EtlProfilingScope;
 import com.amazon.pocketEtl.Loader;
 import com.amazon.pocketEtl.core.EtlStreamObject;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
 import lombok.EqualsAndHashCode;
 import org.apache.logging.log4j.Logger;
 
@@ -61,12 +63,17 @@ class LoaderEtlConsumer<UpstreamType> implements EtlConsumer {
      *
      * @param objectToLoad The object to be loaded.
      * @throws IllegalStateException If the consumer is in a state that cannot accept more objects to be loaded.
+     * @throws UnrecoverableStreamFailureException An unrecoverable problem that affects the entire stream has been
+     *                                             detected and the stream needs to be aborted.
      */
     @Override
-    public void consume(EtlStreamObject objectToLoad) throws IllegalStateException {
+    public void consume(EtlStreamObject objectToLoad) throws IllegalStateException, UnrecoverableStreamFailureException {
         try (EtlProfilingScope ignored = new EtlProfilingScope(parentMetrics, "LoaderConsumer." + name + ".consume")) {
             try {
                 loader.load(objectToLoad.get(loaderTypeClass));
+            } catch (UnrecoverableStreamFailureException e) {
+                logger.error("Unrecoverable stream exception thrown in loader object, aborting stream: ", e);
+                throw e;
             } catch (RuntimeException e) {
                 logger.warn("Exception thrown in loader object: ", e);
                 errorEtlConsumer.consume(objectToLoad);
@@ -98,6 +105,8 @@ class LoaderEtlConsumer<UpstreamType> implements EtlConsumer {
         try (EtlProfilingScope ignored = new EtlProfilingScope(parentMetrics, "LoaderConsumer." + name + ".close")) {
             try {
                 loader.close();
+            } catch (UnrecoverableStreamFailureException e) {
+                throw e;
             } catch (RuntimeException e) {
                 logger.warn("Exception thrown closing loader object: ", e);
             }

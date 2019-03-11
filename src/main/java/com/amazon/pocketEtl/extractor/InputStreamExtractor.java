@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -15,16 +15,17 @@
 
 package com.amazon.pocketEtl.extractor;
 
-import com.amazon.pocketEtl.EtlMetrics;
-import com.amazon.pocketEtl.Extractor;
-import lombok.AccessLevel;
-import lombok.RequiredArgsConstructor;
-
 import java.io.InputStream;
 import java.util.Iterator;
 import java.util.Optional;
 import java.util.function.Supplier;
-import java.util.prefs.BackingStoreException;
+
+import com.amazon.pocketEtl.EtlMetrics;
+import com.amazon.pocketEtl.Extractor;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 
 /**
  * Extractor implementation that maps an input stream into objects to be extracted.
@@ -38,7 +39,6 @@ import java.util.prefs.BackingStoreException;
  * @param <T> Type of object to be extracted from the input stream.
  */
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
-@SuppressWarnings("WeakerAccess")
 public class InputStreamExtractor<T> implements Extractor<T> {
     private final Supplier<InputStream> inputStreamSupplier;
     private final InputStreamMapper<T> inputStreamMapperFunction;
@@ -72,10 +72,11 @@ public class InputStreamExtractor<T> implements Extractor<T> {
     /**
      * Attempts to extract the next object from the inputStream.
      * @return A newly extracted object or an empty optional if the end of the stream has been reached.
-     * @throws BackingStoreException If the stream has a non-retryable problem.
+     * @throws UnrecoverableStreamFailureException An unrecoverable problem that affects the entire stream has been
+     * detected and the stream needs to be aborted.
      */
     @Override
-    public Optional<T> next() throws BackingStoreException {
+    public Optional<T> next() throws UnrecoverableStreamFailureException {
         if (inputStream == null || mappingIterator == null) {
             throw new IllegalStateException("Attempt to call next() on an uninitialized stream");
         }
@@ -89,7 +90,7 @@ public class InputStreamExtractor<T> implements Extractor<T> {
                 return Optional.empty();
             }
         } catch (RuntimeException e) {
-            throw new BackingStoreException(e);
+            throw new UnrecoverableStreamFailureException(e);
         }
     }
 

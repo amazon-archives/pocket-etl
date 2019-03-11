@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -17,19 +17,19 @@ package com.amazon.pocketEtl.extractor;
 
 import com.amazon.pocketEtl.EtlMetrics;
 import com.amazon.pocketEtl.Extractor;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 
 import javax.annotation.Nullable;
 import java.util.Iterator;
 import java.util.Optional;
-import java.util.prefs.BackingStoreException;
 
 /**
  * An Extractor implementation that wraps any Java iterable object. The iterator will be created just once when the ETL
  * job is first run.
  */
-@SuppressWarnings("WeakerAccess")
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public class IterableExtractor<T> implements Extractor<T> {
     private final Iterable<T> iterable;
@@ -46,13 +46,14 @@ public class IterableExtractor<T> implements Extractor<T> {
     }
 
     /**
-     * Get the next object from the wrapped iterable. If there are any problems, throw a BackingStoreException to force
-     * the ETL runner to pay attention.
+     * Get the next object from the wrapped iterable. If there are any problems, throw an
+     * UnrecoverableStreamFailureException to force the ETL runner to pay attention.
      * @return An optional extracted object. Empty if there are no objects left to extract.
-     * @throws BackingStoreException If anything goes wrong getting the next object from the Iterable.
+     * @throws UnrecoverableStreamFailureException An unrecoverable problem that affects the entire stream has been
+     * detected and the stream needs to be aborted.
      */
     @Override
-    public Optional<T> next() throws BackingStoreException {
+    public Optional<T> next() throws UnrecoverableStreamFailureException {
         if (iterator == null) {
             throw new IllegalStateException("next() called on an unopened extractor");
         }
@@ -60,7 +61,7 @@ public class IterableExtractor<T> implements Extractor<T> {
         try {
             return iterator.hasNext() ? Optional.of(iterator.next()) : Optional.empty();
         } catch (RuntimeException e) {
-            throw new BackingStoreException(e);
+            throw new UnrecoverableStreamFailureException(e);
         }
     }
 

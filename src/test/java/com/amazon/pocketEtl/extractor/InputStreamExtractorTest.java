@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -24,12 +24,13 @@ import org.mockito.junit.MockitoJUnitRunner;
 import java.io.InputStream;
 import java.util.Iterator;
 import java.util.Optional;
-import java.util.prefs.BackingStoreException;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
 
 @RunWith(MockitoJUnitRunner.class)
 public class InputStreamExtractorTest {
@@ -53,7 +54,7 @@ public class InputStreamExtractorTest {
     }
 
     @Test
-    public void extractorCanExtractValues() throws BackingStoreException {
+    public void extractorCanExtractValues() {
         when(mockIterator.hasNext()).thenReturn(true, true, true, false);
         when(mockIterator.next()).thenReturn("one", "two", "three").thenThrow(new RuntimeException("No more values"));
 
@@ -64,8 +65,8 @@ public class InputStreamExtractorTest {
         assertThat(inputStreamExtractor.next(), equalTo(Optional.empty()));
     }
 
-    @Test(expected = BackingStoreException.class)
-    public void nextThrowsBackingStoreExceptionIfIOExceptionOccursWhileReadingStream() throws Exception {
+    @Test(expected = UnrecoverableStreamFailureException.class)
+    public void nextThrowsUnrecoverableStreamFailureExceptionIfIOExceptionOccursWhileReadingStream() {
         when(mockIterator.hasNext()).thenReturn(true, true, true, false);
         when(mockIterator.next()).thenThrow(new RuntimeException("Boom"));
 
@@ -74,12 +75,12 @@ public class InputStreamExtractorTest {
     }
 
     @Test(expected = IllegalStateException.class)
-    public void nextThrowsIllegalStateExceptionIfNotOpened() throws Exception {
+    public void nextThrowsIllegalStateExceptionIfNotOpened() {
         inputStreamExtractor.next();
     }
 
     @Test(expected = RuntimeException.class)
-    public void openThrowsRuntimeExceptionIfRuntimeExceptionThrownByInputStreamMapper() throws Exception {
+    public void openThrowsRuntimeExceptionIfRuntimeExceptionThrownByInputStreamMapper() {
         when(mockInputStreamMapper.apply(mockInputStream)).thenThrow(new RuntimeException("Bad AWS exception"));
         inputStreamExtractor.open(null);
     }

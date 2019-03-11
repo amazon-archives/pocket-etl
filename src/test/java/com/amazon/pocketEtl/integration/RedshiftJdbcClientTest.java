@@ -33,6 +33,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.List;
 
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -151,8 +152,11 @@ public class RedshiftJdbcClientTest extends EtlTestBase {
     public void copyAndMergeRollsbackOnSQLException() throws Exception {
         when(mockPreparedStatement.execute()).thenThrow(new SQLException("Redshift hates you"));
 
-        redshiftJdbcClient.copyAndMerge(FILE_COLUMN_NAMES, KEY_COLUMN_NAMES, DESTINATION_TABLE, S3_BUCKET, S3_PREFIX,
-                S3_REGION, IAM_ROLE, mockMetrics);
+        try {
+            redshiftJdbcClient.copyAndMerge(FILE_COLUMN_NAMES, KEY_COLUMN_NAMES, DESTINATION_TABLE, S3_BUCKET, S3_PREFIX,
+                                            S3_REGION, IAM_ROLE, mockMetrics);
+        } catch (RuntimeException ignored) {
+        }
 
         verify(mockRedshiftConnection).rollback();
     }
@@ -162,8 +166,12 @@ public class RedshiftJdbcClientTest extends EtlTestBase {
         when(mockPreparedStatement.execute()).thenThrow(new SQLException("Redshift hates you")).thenReturn(true);
         doThrow(new SQLException("Test Exception")).when(mockRedshiftConnection).rollback();
 
-        redshiftJdbcClient.copyAndMerge(FILE_COLUMN_NAMES, KEY_COLUMN_NAMES, DESTINATION_TABLE, S3_BUCKET, S3_PREFIX,
-                S3_REGION, IAM_ROLE, mockMetrics);
+        try {
+            redshiftJdbcClient.copyAndMerge(FILE_COLUMN_NAMES, KEY_COLUMN_NAMES, DESTINATION_TABLE, S3_BUCKET, S3_PREFIX,
+                                            S3_REGION, IAM_ROLE, mockMetrics);
+            fail("Excepted exception to be thrown");
+        } catch (RuntimeException ignored) {
+        }
 
         verify(mockRedshiftConnection).close();
     }
@@ -173,8 +181,12 @@ public class RedshiftJdbcClientTest extends EtlTestBase {
         when(mockPreparedStatement.execute()).thenThrow(new SQLException("Redshift hates you"))
                 .thenReturn(true);
 
-        redshiftJdbcClient.copyAndMerge(FILE_COLUMN_NAMES, KEY_COLUMN_NAMES, DESTINATION_TABLE, S3_BUCKET, S3_PREFIX,
+        try {
+            redshiftJdbcClient.copyAndMerge(FILE_COLUMN_NAMES, KEY_COLUMN_NAMES, DESTINATION_TABLE, S3_BUCKET, S3_PREFIX,
                 S3_REGION, IAM_ROLE, mockMetrics);
+            fail("Excepted exception to be thrown");
+        } catch (RuntimeException ignored) {
+        }
 
         InOrder inOrder = inOrder(mockPreparedStatement, mockRedshiftConnection);
         inOrder.verify(mockRedshiftConnection).prepareStatement(eq(COPY_AND_MERGE_SQL_1));
@@ -212,8 +224,12 @@ public class RedshiftJdbcClientTest extends EtlTestBase {
     public void deleteAndCopyRollsbackOnSQLException() throws Exception {
         when(mockPreparedStatement.execute()).thenThrow(new SQLException("Redshift hates you"));
 
-        redshiftJdbcClient.deleteAndCopy(FILE_COLUMN_NAMES, DESTINATION_TABLE, S3_BUCKET, S3_PREFIX,
+        try {
+            redshiftJdbcClient.deleteAndCopy(FILE_COLUMN_NAMES, DESTINATION_TABLE, S3_BUCKET, S3_PREFIX,
                 S3_REGION, IAM_ROLE, mockMetrics);
+            fail("Excepted exception to be thrown");
+        } catch (RuntimeException ignored) {
+        }
 
         verify(mockRedshiftConnection).rollback();
     }
@@ -223,8 +239,12 @@ public class RedshiftJdbcClientTest extends EtlTestBase {
         when(mockPreparedStatement.execute()).thenThrow(new SQLException("Redshift hates you")).thenReturn(true);
         doThrow(new SQLException("Test Exception")).when(mockRedshiftConnection).rollback();
 
-        redshiftJdbcClient.deleteAndCopy(FILE_COLUMN_NAMES, DESTINATION_TABLE, S3_BUCKET, S3_PREFIX,
+        try {
+            redshiftJdbcClient.deleteAndCopy(FILE_COLUMN_NAMES, DESTINATION_TABLE, S3_BUCKET, S3_PREFIX,
                 S3_REGION, IAM_ROLE, mockMetrics);
+            fail("Excepted exception to be thrown");
+        } catch (RuntimeException ignored) {
+        }
 
         verify(mockRedshiftConnection).close();
     }
@@ -251,7 +271,11 @@ public class RedshiftJdbcClientTest extends EtlTestBase {
     public void truncateClosesConnectionAfterSQLException() throws Exception {
         when(mockPreparedStatement.execute()).thenThrow(new SQLException("Redshift hates you"));
 
-        redshiftJdbcClient.truncate(DESTINATION_TABLE);
+        try {
+            redshiftJdbcClient.truncate(DESTINATION_TABLE);
+            fail("Excepted exception to be thrown");
+        } catch (RuntimeException ignored) {
+        }
 
         verify(mockRedshiftConnection).close();
     }

@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -15,21 +15,21 @@
 
 package com.amazon.pocketEtl;
 
-import com.amazon.pocketEtl.core.consumer.EtlConsumer;
-import com.amazon.pocketEtl.core.executor.EtlExecutorFactory;
-import com.amazon.pocketEtl.core.producer.EtlProducer;
-import com.amazon.pocketEtl.core.producer.EtlProducerFactory;
-import lombok.AccessLevel;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-
-import javax.annotation.Nonnull;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.stream.Collectors;
 
+import javax.annotation.Nonnull;
+
+import com.amazon.pocketEtl.core.consumer.EtlConsumer;
+import com.amazon.pocketEtl.core.executor.EtlExecutorFactory;
+import com.amazon.pocketEtl.core.producer.EtlProducer;
+import com.amazon.pocketEtl.core.producer.EtlProducerFactory;
+
+import lombok.AccessLevel;
+import lombok.Getter;
+
 @Getter(AccessLevel.PACKAGE)
-@EqualsAndHashCode(callSuper = true)
 class EtlExtractStage extends EtlProducerStage {
     private final static String DEFAULT_EXTRACT_STAGE_NAME = "EtlStream.Extract";
     private final static EtlExecutorFactory defaultExecutorFactory = new EtlExecutorFactory();

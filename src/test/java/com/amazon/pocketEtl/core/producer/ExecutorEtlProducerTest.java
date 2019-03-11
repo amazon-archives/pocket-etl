@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ import com.amazon.pocketEtl.EtlMetrics;
 import com.amazon.pocketEtl.EtlTestBase;
 import com.amazon.pocketEtl.core.executor.EtlExecutor;
 import com.amazon.pocketEtl.exception.GenericEtlException;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -28,7 +30,6 @@ import org.mockito.junit.MockitoJUnitRunner;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.prefs.BackingStoreException;
 import java.util.stream.IntStream;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -73,8 +74,8 @@ public class ExecutorEtlProducerTest extends EtlTestBase {
     }
 
     @Test
-    public void produceClosesProducerAfterException() throws Exception {
-        doThrow(new BackingStoreException("Test exception")).when(mockEtlProducers.get(0)).produce();
+    public void produceClosesProducerAfterException() {
+        doThrow(new UnrecoverableStreamFailureException("Test exception")).when(mockEtlProducers.get(0)).produce();
 
         executorProducer.open(etlProfilingScope.getMetrics());
         executorProducer.produce();

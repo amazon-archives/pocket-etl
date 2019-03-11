@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package com.amazon.pocketEtl;
 
 import com.amazon.pocketEtl.core.DefaultLoggingStrategy;
 import com.amazon.pocketEtl.core.consumer.EtlConsumer;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
 import javax.annotation.Nonnull;
@@ -29,7 +28,6 @@ import java.util.function.Function;
  * @param <T> The type of the data being operated on by this stage in the stream.
  */
 @Getter
-@EqualsAndHashCode
 public abstract class EtlConsumerStage<T> {
     /**
      * Static constructor for an EtlConsumerStage that transforms data in the stream. Used as a component in an

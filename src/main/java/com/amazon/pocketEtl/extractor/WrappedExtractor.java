@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -15,15 +15,17 @@
 
 package com.amazon.pocketEtl.extractor;
 
-import com.amazon.pocketEtl.EtlMetrics;
-import com.amazon.pocketEtl.Extractor;
-import lombok.RequiredArgsConstructor;
+import static lombok.AccessLevel.PROTECTED;
+
+import java.util.Optional;
 
 import javax.annotation.Nullable;
-import java.util.Optional;
-import java.util.prefs.BackingStoreException;
 
-import static lombok.AccessLevel.PROTECTED;
+import com.amazon.pocketEtl.EtlMetrics;
+import com.amazon.pocketEtl.Extractor;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
+import lombok.RequiredArgsConstructor;
 
 /**
  * Allows a class to masquerade as an Extractor by extending this class and providing an implementation of a method
@@ -36,7 +38,7 @@ public abstract class WrappedExtractor<T> implements Extractor<T> {
     protected abstract Extractor<T> getWrappedExtractor();
 
     @Override
-    public Optional<T> next() throws BackingStoreException {
+    public Optional<T> next() throws UnrecoverableStreamFailureException {
         return getWrappedExtractor().next();
     }
 

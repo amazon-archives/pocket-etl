@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package com.amazon.pocketEtl;
 import javax.annotation.Nullable;
 import java.util.List;
 
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
 /**
  * Interface for an object that transforms an object of one type into a stream of objects of another type. This allows
  * for an expansion or contraction of the stream where one object can become many objects or no objects.
@@ -32,8 +34,10 @@ public interface Transformer<UpstreamType, DownstreamType> extends AutoCloseable
      *
      * @param objectToTransform The object to be transformed.
      * @return The transformed object.
+     * @throws UnrecoverableStreamFailureException An unrecoverable problem that affects the entire stream has been
+     * detected and the stream needs to be aborted.
      */
-    List<DownstreamType> transform(UpstreamType objectToTransform);
+    List<DownstreamType> transform(UpstreamType objectToTransform) throws UnrecoverableStreamFailureException;
 
     /**
      * Signal the transformer to prepare to transform objects.

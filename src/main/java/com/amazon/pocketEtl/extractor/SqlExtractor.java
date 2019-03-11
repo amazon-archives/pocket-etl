@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -15,24 +15,27 @@
 
 package com.amazon.pocketEtl.extractor;
 
-import com.amazon.pocketEtl.EtlMetrics;
-import com.amazon.pocketEtl.EtlProfilingScope;
-import com.amazon.pocketEtl.Extractor;
-import com.amazon.pocketEtl.integration.db.jdbi.EtlJdbi;
-import lombok.AccessLevel;
-import lombok.RequiredArgsConstructor;
+import static org.apache.logging.log4j.LogManager.getLogger;
+
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.BiConsumer;
+
+import javax.sql.DataSource;
+
 import org.apache.logging.log4j.Logger;
 import org.skife.jdbi.v2.DBI;
 import org.skife.jdbi.v2.Handle;
 import org.skife.jdbi.v2.ResultIterator;
 
-import javax.sql.DataSource;
-import java.util.Map;
-import java.util.Optional;
-import java.util.function.BiConsumer;
-import java.util.prefs.BackingStoreException;
+import com.amazon.pocketEtl.EtlMetrics;
+import com.amazon.pocketEtl.EtlProfilingScope;
+import com.amazon.pocketEtl.Extractor;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+import com.amazon.pocketEtl.integration.db.jdbi.EtlJdbi;
 
-import static org.apache.logging.log4j.LogManager.getLogger;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 
 /**
  * An implementation of Extractor that uses a JDBC datasource as a backing store. JDBI is used to wrap the datasource
@@ -92,13 +95,11 @@ public class SqlExtractor<T> implements Extractor<T> {
      * Extract the next object from the database.
      *
      * @return The next object or empty if no more objects can be extracted.
-     * @throws BackingStoreException If any kind of database/jdbc error occurs during the extract operation.
-     * @throws RuntimeException      Will be thrown if the current record has some issues but the stream is able to continue
-     *                               extracting new records. Typically this exception would be thrown by the marshalling
-     *                               function.
+     * @throws UnrecoverableStreamFailureException An unrecoverable problem that affects the entire stream has been
+     *                                             detected and the stream needs to be aborted.
      */
     @Override
-    public Optional<T> next() throws BackingStoreException, RuntimeException {
+    public Optional<T> next() throws UnrecoverableStreamFailureException {
         if (isClosed) {
             IllegalStateException e = new IllegalStateException("Attempt to use extractor that has been closed");
             logger.error("Error inside extractor: ", e);
@@ -117,7 +118,7 @@ public class SqlExtractor<T> implements Extractor<T> {
                 try {
                     hasNext = resultIterator.hasNext();
                 } catch (RuntimeException e) {
-                    throw new BackingStoreException(e);
+                    throw new UnrecoverableStreamFailureException(e);
                 }
 
                 if (hasNext) {

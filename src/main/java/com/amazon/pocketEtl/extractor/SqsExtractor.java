@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -15,18 +15,7 @@
 
 package com.amazon.pocketEtl.extractor;
 
-import com.amazon.pocketEtl.EtlMetrics;
-import com.amazon.pocketEtl.EtlProfilingScope;
-import com.amazon.pocketEtl.Extractor;
-import com.amazonaws.AmazonClientException;
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.services.sqs.AmazonSQS;
-import com.amazonaws.services.sqs.AmazonSQSClient;
-import com.amazonaws.services.sqs.model.Message;
-import com.amazonaws.services.sqs.model.ReceiveMessageRequest;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import org.apache.logging.log4j.Logger;
+import static org.apache.logging.log4j.LogManager.getLogger;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -36,9 +25,23 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import java.util.prefs.BackingStoreException;
 
-import static org.apache.logging.log4j.LogManager.getLogger;
+import org.apache.logging.log4j.Logger;
+
+import com.amazon.pocketEtl.EtlMetrics;
+import com.amazon.pocketEtl.EtlProfilingScope;
+import com.amazon.pocketEtl.Extractor;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
+import com.amazonaws.AmazonClientException;
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.services.sqs.AmazonSQS;
+import com.amazonaws.services.sqs.AmazonSQSClient;
+import com.amazonaws.services.sqs.model.Message;
+import com.amazonaws.services.sqs.model.ReceiveMessageRequest;
+
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 
 /**
  * An implementation of Extractor that uses SQS as backing store. A function that can translate string messages from the
@@ -153,12 +156,11 @@ public class SqsExtractor<T> implements Extractor<T> {
     /**
      * Extract next object from SQS.
      * @return The next object or empty if no more objects can be extracted.
-     * @throws BackingStoreException If any kind of SQS error occurs during the extract operation.
-     * @throws RuntimeException Will be thrown by the mapper if the json is invalid or doesn't matches the fields
-     *                          in DTO.
+     * @throws UnrecoverableStreamFailureException An unrecoverable problem that affects the entire stream has been
+     *                                             detected and the stream needs to be aborted.
      */
     @Override
-    public Optional<T> next() throws BackingStoreException, RuntimeException {
+    public Optional<T> next() throws UnrecoverableStreamFailureException {
         if (isClosed) {
             IllegalStateException e = new IllegalStateException("Attempt to use extractor that has been closed");
             logger.error("Error inside extractor: ", e);
@@ -185,7 +187,7 @@ public class SqsExtractor<T> implements Extractor<T> {
         return Optional.empty();
     }
 
-    private Iterator<Message> getMessageIterator() throws BackingStoreException {
+    private Iterator<Message> getMessageIterator() throws UnrecoverableStreamFailureException {
         if (messageIterator == null) {
             // Need to use Set since calling receiveMessage in loop might return duplicate messages from SQS.
             Set<Message> messageSet = new LinkedHashSet<>();
@@ -210,13 +212,13 @@ public class SqsExtractor<T> implements Extractor<T> {
                         logger.warn(String.format("Retries count: %d", retries));
                     } catch (AmazonClientException e) {
                         logger.error("Non-retriable exception received", e);
-                        throw new BackingStoreException(e);
+                        throw new UnrecoverableStreamFailureException(e);
                     }
                 }
 
                 if (retries >= SQS_GET_MESSAGES_MAX_RETRIES) {
-                    throw new BackingStoreException("Maximum number of retries reached attempting to get sqs messages. " +
-                            "Giving up.");
+                    throw new UnrecoverableStreamFailureException("Maximum number of retries reached attempting to get "
+                                                                  + "SQS messages. Giving up.");
                 }
 
                 if (messages.isEmpty()) break;

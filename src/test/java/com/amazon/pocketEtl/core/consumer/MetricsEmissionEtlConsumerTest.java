@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -59,6 +59,13 @@ public class MetricsEmissionEtlConsumerTest extends EtlTestBase {
 
         verify(mockMetrics, times(3))
                 .addCount(eq(JOB_NAME + "." + STAGE_NAME + ".recordsProcessed"), eq(1.0));
+    }
+
+    @Test
+    public void consumeEmitsAZeroCounterWithoutAnyRecordConsumed() {
+        metricsEmissionConsumer.open(mockMetrics);
+
+        verify(mockMetrics).addCount(eq(JOB_NAME + "." + STAGE_NAME + ".recordsProcessed"), eq(0.0));
     }
 
     @Test

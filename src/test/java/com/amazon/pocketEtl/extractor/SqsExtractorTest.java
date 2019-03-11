@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 package com.amazon.pocketEtl.extractor;
 
 import com.amazon.pocketEtl.EtlTestBase;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.sqs.AmazonSQS;
@@ -35,7 +37,6 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
 import java.util.Optional;
-import java.util.prefs.BackingStoreException;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertThat;
@@ -109,7 +110,7 @@ public class SqsExtractorTest extends EtlTestBase {
     }
 
     @Test
-    public void nextReturnsNextValueFromMessageListIgnoringDuplicates() throws Exception {
+    public void nextReturnsNextValueFromMessageListIgnoringDuplicates() {
         when(mockReceiveMessageResult.getMessages())
                 .thenReturn(ImmutableList.of(sampleMessageOne, sampleMessageTwo))
                 .thenReturn(ImmutableList.of(sampleMessageOne, sampleMessageThree))
@@ -122,7 +123,7 @@ public class SqsExtractorTest extends EtlTestBase {
     }
 
     @Test
-    public void whenBatchSizeLimitIsNotSetMaximumSqsMessagesRequested() throws Exception {
+    public void whenBatchSizeLimitIsNotSetMaximumSqsMessagesRequested() {
         when(mockReceiveMessageResult.getMessages())
                 .thenReturn(ImmutableList.of(sampleMessageOne, sampleMessageTwo))
                 .thenReturn(ImmutableList.of());
@@ -136,7 +137,7 @@ public class SqsExtractorTest extends EtlTestBase {
     }
 
     @Test
-    public void batchSizeLimitIsCorrectlyApplied() throws Exception {
+    public void batchSizeLimitIsCorrectlyApplied() {
         sqsExtractor = SqsExtractor.of(SAMPLE_QUEUE_URL, JSONStringMapper.of(BasicDTO.class))
                 .withClient(mockAmazonSQS)
                 .withBatchSizeLimit(2)
@@ -158,32 +159,32 @@ public class SqsExtractorTest extends EtlTestBase {
     }
 
     @Test
-    public void nextReturnsEmptyValueWhenSqsMessageQueueIsEmpty() throws Exception{
+    public void nextReturnsEmptyValueWhenSqsMessageQueueIsEmpty() {
         when(mockReceiveMessageResult.getMessages()).thenReturn(ImmutableList.of());
 
         assertThat(sqsExtractor.next(), equalTo(Optional.empty()));
     }
 
-    @Test(expected = BackingStoreException.class)
-    public void nextThrowsBackingStoreExceptionIfQueueNameIsInvalidOrNull() throws Exception {
+    @Test(expected = UnrecoverableStreamFailureException.class)
+    public void nextThrowsUnrecoverableStreamFailureExceptionIfQueueNameIsInvalidOrNull() {
         when(mockAmazonSQS.receiveMessage(any(ReceiveMessageRequest.class))).thenThrow(new AmazonClientException(SAMPLE_EXCEPTION));
 
         sqsExtractor.next();
     }
 
     @Test
-    public void nextRetriesThreeTimesBeforeThrowingBackingStoreExceptionInCaseOfServiceException() {
+    public void nextRetriesThreeTimesBeforeThrowingUnrecoverableStreamFailureExceptionInCaseOfServiceException() {
         when(mockAmazonSQS.receiveMessage(any(ReceiveMessageRequest.class))).thenThrow(new AmazonServiceException(SAMPLE_EXCEPTION));
 
         try {
             sqsExtractor.next();
-        } catch (BackingStoreException ignored) {}
+        } catch (UnrecoverableStreamFailureException ignored) {}
 
         verify(mockAmazonSQS, times(3)).receiveMessage(any(ReceiveMessageRequest.class));
     }
 
     @Test
-    public void nextRetriesTwoTimesBeforeSuccess()throws Exception{
+    public void nextRetriesTwoTimesBeforeSuccess() {
         when(mockAmazonSQS.receiveMessage(any(ReceiveMessageRequest.class)))
                 .thenThrow(new AmazonServiceException(SAMPLE_EXCEPTION))
                 .thenReturn(mockReceiveMessageResult);
@@ -196,7 +197,7 @@ public class SqsExtractorTest extends EtlTestBase {
     }
 
     @Test
-    public void nextEmitsSuccessCounters() throws Exception {
+    public void nextEmitsSuccessCounters() {
         when(mockReceiveMessageResult.getMessages())
                 .thenReturn(ImmutableList.of(sampleMessageOne))
                 .thenReturn(ImmutableList.of());
@@ -206,7 +207,7 @@ public class SqsExtractorTest extends EtlTestBase {
     }
 
     @Test
-    public void nextEmitsFailureCounter() throws Exception{
+    public void nextEmitsFailureCounter() {
         when(mockReceiveMessageResult.getMessages())
                 .thenReturn(ImmutableList.of(sampleMessageFour))
                 .thenReturn(ImmutableList.of());

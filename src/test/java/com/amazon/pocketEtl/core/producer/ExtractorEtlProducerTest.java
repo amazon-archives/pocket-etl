@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -15,25 +15,11 @@
 
 package com.amazon.pocketEtl.core.producer;
 
-import com.amazon.pocketEtl.EtlMetrics;
-import com.amazon.pocketEtl.EtlTestBase;
-import com.amazon.pocketEtl.Extractor;
-import com.amazon.pocketEtl.core.EtlStreamObject;
-import com.amazon.pocketEtl.core.consumer.EtlConsumer;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.InOrder;
-import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
-
-import java.util.Optional;
-import java.util.prefs.BackingStoreException;
-
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
@@ -41,6 +27,21 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
+
+import java.util.Optional;
+
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.InOrder;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnitRunner;
+
+import com.amazon.pocketEtl.EtlMetrics;
+import com.amazon.pocketEtl.EtlTestBase;
+import com.amazon.pocketEtl.Extractor;
+import com.amazon.pocketEtl.core.consumer.EtlConsumer;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
 
 @RunWith(MockitoJUnitRunner.class)
 public class ExtractorEtlProducerTest extends EtlTestBase {
@@ -64,7 +65,7 @@ public class ExtractorEtlProducerTest extends EtlTestBase {
     }
 
     @Test
-    public void producePassesExtractedObjectsToDownstreamConsumer() throws Exception {
+    public void producePassesExtractedObjectsToDownstreamConsumer() {
         when(mockExtractor.next())
                 .thenReturn(Optional.of(new TestDTO(COLUMN_VALUE1)))
                 .thenReturn(Optional.of(new TestDTO(COLUMN_VALUE2)))
@@ -74,14 +75,17 @@ public class ExtractorEtlProducerTest extends EtlTestBase {
         extractorProducer.produce();
 
         InOrder inOrder = inOrder(mockDownstreamEtlConsumer);
-        inOrder.verify(mockDownstreamEtlConsumer, times(1)).consume(eq(new EtlStreamObject().with(new TestDTO(COLUMN_VALUE1))));
-        inOrder.verify(mockDownstreamEtlConsumer, times(1)).consume(eq(new EtlStreamObject().with(new TestDTO(COLUMN_VALUE2))));
-        inOrder.verify(mockDownstreamEtlConsumer, times(1)).consume(eq(new EtlStreamObject().with(new TestDTO(COLUMN_VALUE3))));
+        inOrder.verify(mockDownstreamEtlConsumer, times(1)).consume(argThat(
+            etlStreamObject -> new TestDTO(COLUMN_VALUE1).equals(etlStreamObject.get(TestDTO.class))));
+        inOrder.verify(mockDownstreamEtlConsumer, times(1)).consume(argThat(
+            etlStreamObject -> new TestDTO(COLUMN_VALUE2).equals(etlStreamObject.get(TestDTO.class))));
+        inOrder.verify(mockDownstreamEtlConsumer, times(1)).consume(argThat(
+            etlStreamObject -> new TestDTO(COLUMN_VALUE3).equals(etlStreamObject.get(TestDTO.class))));
         inOrder.verifyNoMoreInteractions();
     }
 
     @Test
-    public void produceCanHandleNonFatalExceptions() throws Exception {
+    public void produceCanHandleNonFatalExceptions() {
         when(mockExtractor.next())
                 .thenReturn(Optional.of(new TestDTO(COLUMN_VALUE1)))
                 .thenThrow(new RuntimeException("Non-fatal exception"))
@@ -91,20 +95,22 @@ public class ExtractorEtlProducerTest extends EtlTestBase {
         extractorProducer.produce();
 
         InOrder inOrder = inOrder(mockDownstreamEtlConsumer);
-        inOrder.verify(mockDownstreamEtlConsumer, times(1)).consume(eq(new EtlStreamObject().with(new TestDTO(COLUMN_VALUE1))));
-        inOrder.verify(mockDownstreamEtlConsumer, times(1)).consume(eq(new EtlStreamObject().with(new TestDTO(COLUMN_VALUE3))));
+        inOrder.verify(mockDownstreamEtlConsumer, times(1)).consume(argThat(
+            etlStreamObject -> new TestDTO(COLUMN_VALUE1).equals(etlStreamObject.get(TestDTO.class))));
+        inOrder.verify(mockDownstreamEtlConsumer, times(1)).consume(argThat(
+            etlStreamObject -> new TestDTO(COLUMN_VALUE3).equals(etlStreamObject.get(TestDTO.class))));
         inOrder.verifyNoMoreInteractions();
     }
 
-    @Test(expected = BackingStoreException.class)
-    public void produceThrowsBackingStoreExceptionIfExtractorDoes() throws Exception {
-        when(mockExtractor.next()).thenThrow(new BackingStoreException("Test"));
+    @Test(expected = UnrecoverableStreamFailureException.class)
+    public void produceThrowsUnrecoverableStreamFailureExceptionIfExtractorDoes() {
+        when(mockExtractor.next()).thenThrow(new UnrecoverableStreamFailureException("Test"));
 
         extractorProducer.produce();
     }
 
     @Test
-    public void produceCanHandleAnEmptyResultSet() throws Exception {
+    public void produceCanHandleAnEmptyResultSet() {
         when(mockExtractor.next()).thenReturn(Optional.empty());
 
         extractorProducer.produce();
@@ -173,7 +179,7 @@ public class ExtractorEtlProducerTest extends EtlTestBase {
     }
 
     @Test
-    public void produceEmitsAProfilerScope() throws Exception {
+    public void produceEmitsAProfilerScope() {
         when(mockExtractor.next()).thenReturn(Optional.empty());
 
         extractorProducer.produce();

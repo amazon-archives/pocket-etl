@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -15,18 +15,20 @@
 
 package com.amazon.pocketEtl.core.producer;
 
+import static org.apache.logging.log4j.LogManager.getLogger;
+
+import java.util.Optional;
+
+import org.apache.logging.log4j.Logger;
+
 import com.amazon.pocketEtl.EtlMetrics;
 import com.amazon.pocketEtl.EtlProfilingScope;
 import com.amazon.pocketEtl.Extractor;
 import com.amazon.pocketEtl.core.EtlStreamObject;
 import com.amazon.pocketEtl.core.consumer.EtlConsumer;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
 import lombok.EqualsAndHashCode;
-import org.apache.logging.log4j.Logger;
-
-import java.util.Optional;
-import java.util.prefs.BackingStoreException;
-
-import static org.apache.logging.log4j.LogManager.getLogger;
 
 /**
  * Implementation of producer that uses an Extractor object to produce new objects. Each produced object will then be
@@ -62,7 +64,7 @@ class ExtractorEtlProducer<T> implements EtlProducer {
      * complete down the chain when it returns, only closing the extractor will do that.
      **/
     @Override
-    public void produce() throws IllegalStateException, BackingStoreException {
+    public void produce() throws IllegalStateException, UnrecoverableStreamFailureException {
         if (isClosed) {
             throw new IllegalStateException("Attempt to run extractor after extractor was closed");
         }
@@ -76,7 +78,9 @@ class ExtractorEtlProducer<T> implements EtlProducer {
 
                 try {
                     result = extractor.next();
-                    result.ifPresent(obj -> downstreamEtlConsumer.consume(new EtlStreamObject().with(obj)));
+                    result.ifPresent(obj -> downstreamEtlConsumer.consume(EtlStreamObject.of(obj)));
+                } catch (UnrecoverableStreamFailureException e) {
+                    throw e;
                 } catch (RuntimeException e) {
                     nonFatalExceptionWasThrown = true;
                     logger.error("Extractor threw an exception during next() operation:", e);
@@ -98,6 +102,8 @@ class ExtractorEtlProducer<T> implements EtlProducer {
 
             try {
                 extractor.close();
+            } catch (UnrecoverableStreamFailureException e) {
+                throw e;
             } catch (RuntimeException e) {
                 logger.warn("Exception thrown closing extractor: ", e);
             }

@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -44,15 +44,20 @@ class MetricsEmissionEtlConsumer implements EtlConsumer {
     @Override
     public void consume(EtlStreamObject objectToConsume) throws IllegalStateException {
         try (EtlProfilingScope scope = new EtlProfilingScope(parentMetrics, "MetricsEmissionConsumer." + stageName + ".consume")) {
-            scope.addCounter(stageName + ".recordsProcessed", 1) ;
+            scope.addCounter(stageName + ".recordsProcessed", 1);
             downstreamEtlConsumer.consume(objectToConsume);
         }
     }
 
     @Override
     public void open(EtlMetrics parentMetrics) {
-        this.parentMetrics = parentMetrics;
-        downstreamEtlConsumer.open(parentMetrics);
+        try (EtlProfilingScope scope = new EtlProfilingScope(parentMetrics, "MetricsEmissionConsumer." +
+                                                                            stageName +
+                                                                            ".open")) {
+            scope.addCounter(stageName + ".recordsProcessed", 0);
+            this.parentMetrics = parentMetrics;
+            downstreamEtlConsumer.open(parentMetrics);
+        }
     }
 
     @Override

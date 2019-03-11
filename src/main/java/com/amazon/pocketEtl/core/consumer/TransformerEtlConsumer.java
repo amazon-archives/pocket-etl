@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ import com.amazon.pocketEtl.EtlMetrics;
 import com.amazon.pocketEtl.EtlProfilingScope;
 import com.amazon.pocketEtl.Transformer;
 import com.amazon.pocketEtl.core.EtlStreamObject;
+import com.amazon.pocketEtl.exception.UnrecoverableStreamFailureException;
+
 import lombok.EqualsAndHashCode;
 import org.apache.logging.log4j.Logger;
 
@@ -74,22 +76,35 @@ class TransformerEtlConsumer<UpstreamType, DownstreamType> implements EtlConsume
      *
      * @param objectToTransform The object to be transformed.
      * @throws IllegalStateException If the consumer is in a state that cannot accept work.
+     * @throws UnrecoverableStreamFailureException An unrecoverable problem that affects the entire stream has been
+     *                                             detected and the stream needs to be aborted.
      */
     @Override
-    public void consume(EtlStreamObject objectToTransform) throws IllegalStateException {
-        try (EtlProfilingScope ignored = new EtlProfilingScope(parentMetrics, "TransformerConsumer." + name + ".consume")) {
+    public void consume(EtlStreamObject objectToTransform) throws IllegalStateException,
+                                                                  UnrecoverableStreamFailureException {
+        try (EtlProfilingScope ignored = new EtlProfilingScope(parentMetrics, "TransformerConsumer." + name +
+                                                                              ".consume")) {
 
             List<DownstreamType> transformedObjects;
 
             try {
                 transformedObjects = transformer.transform(objectToTransform.get(transformerUpstreamTypeClass));
+            } catch (UnrecoverableStreamFailureException e) {
+                logger.error("Unrecoverable stream exception thrown in transformer object, aborting stream: ", e);
+                throw e;
             } catch (RuntimeException e) {
                 logger.warn("Exception thrown in transformer object: ", e);
                 errorEtlConsumer.consume(objectToTransform);
                 return;
             }
 
-            transformedObjects.forEach(obj -> downstreamEtlConsumer.consume(new EtlStreamObject(objectToTransform).with(obj)));
+            // Optimized path for single object transformation, re-uses existing EtlStreamObject
+            if (transformedObjects.size() == 1) {
+                downstreamEtlConsumer.consume(objectToTransform.with(transformedObjects.get(0)));
+            } else {
+                transformedObjects.forEach(
+                    obj -> downstreamEtlConsumer.consume(objectToTransform.createCopy().with(obj)));
+            }
         }
     }
 
@@ -118,11 +133,15 @@ class TransformerEtlConsumer<UpstreamType, DownstreamType> implements EtlConsume
         try (EtlProfilingScope ignored = new EtlProfilingScope(parentMetrics, "TransformerConsumer." + name + ".close")) {
             try {
                 downstreamEtlConsumer.close();
+            } catch (UnrecoverableStreamFailureException e) {
+                throw e;
             } catch (RuntimeException e) {
                 logger.warn("Exception thrown closing downstream EtlConsumer object: ", e);
             }
             try {
                 transformer.close();
+            } catch (UnrecoverableStreamFailureException e) {
+                throw e;
             } catch (RuntimeException e) {
                 logger.warn("Exception thrown closing transformer object: ", e);
             }

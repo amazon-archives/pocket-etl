@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -36,7 +36,6 @@ import org.mockito.junit.MockitoJUnitRunner;
 
 import java.util.Collections;
 import java.util.Optional;
-import java.util.prefs.BackingStoreException;
 
 import static com.amazon.pocketEtl.EtlConsumerStage.load;
 import static com.amazon.pocketEtl.EtlConsumerStage.transform;
@@ -90,7 +89,7 @@ public class EtlStreamTest {
     }
 
     @Before
-    public void initializeMockEtlComponents() throws BackingStoreException {
+    public void initializeMockEtlComponents() {
         when(mockExtractor.next()).thenReturn(Optional.of(simpleObject)).thenReturn(Optional.empty());
         when(mockTransformer.transform(any())).thenReturn(ImmutableList.of(simpleObject));
     }
@@ -195,7 +194,7 @@ public class EtlStreamTest {
     }
 
     @Test(expected = IllegalArgumentException.class)
-    public void emptyCollectionOfExtractorsThrowsIllegalArgumentException() throws Exception {
+    public void emptyCollectionOfExtractorsThrowsIllegalArgumentException() {
         EtlStream.extract(Collections.emptyList());
     }
 

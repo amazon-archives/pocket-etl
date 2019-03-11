@@ -1,5 +1,5 @@
 /*
- *   Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *   Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License").
  *   You may not use this file except in compliance with the License.
@@ -16,21 +16,21 @@
 package com.amazon.pocketEtl;
 
 
+import static org.apache.logging.log4j.LogManager.getLogger;
+
+import java.util.function.Function;
+
+import javax.annotation.Nonnull;
+
 import com.amazon.pocketEtl.core.consumer.EtlConsumer;
 import com.amazon.pocketEtl.core.consumer.EtlConsumerFactory;
 import com.amazon.pocketEtl.core.executor.EtlExecutor;
 import com.amazon.pocketEtl.core.executor.EtlExecutorFactory;
+
 import lombok.AccessLevel;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
-import javax.annotation.Nonnull;
-import java.util.function.Function;
-
-import static org.apache.logging.log4j.LogManager.getLogger;
-
 @Getter(AccessLevel.PACKAGE)
-@EqualsAndHashCode(callSuper = true)
 class EtlTransformStage<T> extends EtlConsumerStage<T> {
     private final static String DEFAULT_TRANSFORM_STAGE_NAME = "EtlStream.Transform";
 
